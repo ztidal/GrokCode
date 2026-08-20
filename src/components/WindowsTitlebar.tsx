@@ -1,5 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useId, useRef, useState } from "react";
+import { ThemeToggle } from "./ThemeToggle";
 import logoMark from "../assets/logo.png";
 import type { UpdateCheckStatus } from "../hooks/useAppUpdate";
 import { useAppVersion } from "../hooks/useAppVersion";
@@ -111,6 +112,8 @@ export function WindowsTitlebar({
             >
               <span>Check for Updates</span>
             </button>
+            <div className="windows-settings-separator" aria-hidden />
+            <ThemeToggle />
             <div className="windows-settings-separator" aria-hidden />
             <div className="windows-settings-version">
               <span>Current version</span>

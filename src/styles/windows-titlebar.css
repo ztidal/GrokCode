@@ -228,3 +228,58 @@
 .windows-control-close::after {
   transform: rotate(-45deg);
 }
+
+/* ── Theme toggle (Settings menu) ── */
+.theme-toggle-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 9px 9px;
+}
+
+.theme-toggle-label {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.theme-toggle-hint {
+  color: var(--text-muted);
+}
+
+.theme-toggle {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-hover);
+}
+
+.theme-toggle-option {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.theme-toggle-option:hover {
+  color: var(--text);
+}
+
+.theme-toggle-option[aria-checked="true"] {
+  background: var(--bg-menu);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.theme-toggle-option:focus-visible {
+  outline: 2px solid var(--live);
+  outline-offset: -2px;
+}
