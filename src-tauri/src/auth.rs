@@ -16,7 +16,12 @@ use std::time::{Duration, Instant};
 
 /// Match Grok's default early-invalidation window (seconds before expiry).
 const EARLY_INVALIDATION_SECS: u64 = 300;
-const LOCK_WAIT: Duration = Duration::from_secs(2);
+/// Must exceed the longest time a holder legitimately keeps the lock. The holder
+/// spans an OIDC token request, and `billing`'s agent allows 3s to connect plus
+/// 5s to read, so a healthy refresh on a slow link takes ~8s. Upstream waited 2s
+/// and therefore reported "another process may be refreshing" against a peer
+/// that was simply still working — reliably so on proxied connections.
+const LOCK_WAIT: Duration = Duration::from_secs(20);
 const LOCK_POLL: Duration = Duration::from_millis(40);
 const DEFAULT_ACCESS_TTL_SECS: u64 = 6 * 3600;
 

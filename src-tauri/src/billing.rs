@@ -8,7 +8,14 @@
 use crate::agent_runtime::now_unix_secs;
 use crate::auth;
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 use std::time::Duration;
+
+/// Serializes usage fetches. The UI polls on a `setInterval`, which does not
+/// wait for the previous call, so two fetches can overlap on a slow link. Both
+/// would then try to refresh the same expired token and contend for
+/// `auth.json.lock` — the app reporting a conflict with itself.
+static FETCH_GUARD: Mutex<()> = Mutex::new(());
 
 const BILLING_URL: &str = "https://cli-chat-proxy.grok.com/v1/billing?format=credits";
 
@@ -89,6 +96,8 @@ fn is_grok_build_product(product: &str) -> bool {
 
 /// Fetch current period usage (weekly for SuperGrok / Grok Build accounts).
 pub fn fetch_week_usage() -> WeekUsage {
+    // A poisoned guard carries no state worth protecting — keep fetching.
+    let _guard = FETCH_GUARD.lock().unwrap_or_else(|e| e.into_inner());
     let fetched_at = now_unix_secs().to_string();
     match fetch_week_usage_inner() {
         Ok(mut u) => {
