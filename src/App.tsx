@@ -95,6 +95,11 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  /**
+   * Working directory the New Task modal opens on, when the caller named one
+   * (a project header's "+"). Null means "wherever the app would have guessed".
+   */
+  const [modalCwd, setModalCwd] = useState<string | null>(null);
   /** Pending Stop confirmation: which managed agent to kill. */
   const [stopConfirm, setStopConfirm] = useState<{
     handleId: string;
@@ -489,6 +494,8 @@ function App() {
         setError(info.lastError ?? "Agent failed to start");
       }
       setModalOpen(false);
+      // Or the next toolbar New would still open on this project's folder.
+      setModalCwd(null);
       // Disk index may lag a moment
       window.setTimeout(() => void refreshList(), 800);
     } catch (e) {
@@ -892,7 +899,13 @@ function App() {
     </button>
   );
 
-  const defaultCwd = detail?.card.cwd ?? sessions[0]?.cwd ?? "";
+  const defaultCwd = modalCwd ?? detail?.card.cwd ?? sessions[0]?.cwd ?? "";
+
+  /** One modal, two entry points: the toolbar's New and a project's "+". */
+  const openNewTask = useCallback((cwd?: string) => {
+    setModalCwd(cwd ?? null);
+    setModalOpen(true);
+  }, []);
 
   /**
    * sessionId → managed status for left-rail sort + run chrome.
@@ -983,7 +996,8 @@ function App() {
             managedStatuses={managedStatuses}
             managedPids={managedPids}
             needsInputSessionIds={needsInputSessionIds}
-            onNewTask={() => setModalOpen(true)}
+            onNewTask={() => openNewTask()}
+            onNewTaskInProject={openNewTask}
             hasMore={hasMoreSessions}
             onLoadMore={loadMoreSessions}
           />
@@ -1107,7 +1121,10 @@ function App() {
         defaultCwd={defaultCwd}
         busy={controlBusy}
         defaultSessionMode={lastSpawnSessionMode}
-        onClose={() => setModalOpen(false)}
+        onClose={() => {
+          setModalOpen(false);
+          setModalCwd(null);
+        }}
         onSubmit={(o) => void handleSpawn(o)}
       />
 

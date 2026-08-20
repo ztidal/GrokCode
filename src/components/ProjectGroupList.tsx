@@ -12,6 +12,8 @@ interface Props {
   onToggle: (key: string) => void;
   /** So a collapsed group can still show that the open task is inside it. */
   selectedId: string | null;
+  /** Start a task in this project. Omitted when the host has no modal to open. */
+  onNewSession?: (cwd: string) => void;
   /** SessionList owns card chrome; this component owns only the headers. */
   renderSession: (session: SessionCard) => ReactNode;
 }
@@ -22,6 +24,7 @@ export function ProjectGroupList({
   isCollapsed,
   onToggle,
   selectedId,
+  onNewSession,
   renderSession,
 }: Props) {
   return (
@@ -41,36 +44,60 @@ export function ProjectGroupList({
           .join(" ");
         return (
           <div className="project-group" key={group.key}>
-            <button
-              type="button"
-              className={headerClass}
-              onClick={() => onToggle(group.key)}
-              aria-expanded={!collapsed}
-              title={
-                group.missing
-                  ? `${group.path}\nFolder no longer exists`
-                  : group.path
-              }
-            >
-              <span className="project-group-caret" aria-hidden>
-                {collapsed ? "▸" : "▾"}
-              </span>
-              <span className="project-group-label">{group.label}</span>
-              {group.missing && (
-                <span
-                  className="project-group-missing"
-                  aria-label="Folder no longer exists"
-                >
-                  ⚠
-                </span>
-              )}
-              <span
-                className="project-group-count"
-                title={groupCountTitle(group)}
+            {/*
+             * A row, not one big button: the "+" is its own control, and a button
+             * inside a button is neither valid nor separately clickable.
+             */}
+            <div className={headerClass}>
+              <button
+                type="button"
+                className="project-group-toggle"
+                onClick={() => onToggle(group.key)}
+                aria-expanded={!collapsed}
+                title={
+                  group.missing
+                    ? `${group.path}\nFolder no longer exists`
+                    : group.path
+                }
               >
-                {groupCountLabel(group)}
-              </span>
-            </button>
+                <span className="project-group-caret" aria-hidden>
+                  {collapsed ? "▸" : "▾"}
+                </span>
+                <span className="project-group-label">{group.label}</span>
+                {group.missing && (
+                  <span
+                    className="project-group-missing"
+                    aria-label="Folder no longer exists"
+                  >
+                    ⚠
+                  </span>
+                )}
+                <span
+                  className="project-group-count"
+                  title={groupCountTitle(group)}
+                >
+                  {groupCountLabel(group)}
+                </span>
+              </button>
+              {onNewSession && (
+                <button
+                  type="button"
+                  className="project-group-new"
+                  // Disabled rather than hidden: a gap where the control should
+                  // be reads as a bug, the greyed-out one names its own reason.
+                  disabled={group.missing}
+                  title={
+                    group.missing
+                      ? `Cannot start a task in ${group.path}\nFolder no longer exists`
+                      : `New task in ${group.path}`
+                  }
+                  aria-label={`New task in ${group.label}`}
+                  onClick={() => onNewSession(group.path)}
+                >
+                  +
+                </button>
+              )}
+            </div>
             {!collapsed && (
               <div className="project-group-sessions">
                 {group.sessions.map((session) => renderSession(session))}

@@ -14,7 +14,27 @@ import {
   stateTitle,
 } from "../utils/managedChrome";
 import { NO_SESSIONS, useProjectGroups } from "../hooks/useProjectGroups";
+import { sortPinnedFirst, useSessionPins } from "../hooks/useSessionPins";
 import { ProjectGroupList } from "./ProjectGroupList";
+
+/**
+ * Filled when pinned, outlined when not — the state has to survive a theme with
+ * no colour to spare, so it is carried by the shape as well as the tint.
+ */
+function PinGlyph({ filled }: { filled: boolean }) {
+  return (
+    <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden focusable="false">
+      <path
+        d="M6 1.1a3.5 3.5 0 0 0-3.5 3.5c0 2.5 3.5 6.3 3.5 6.3s3.5-3.8 3.5-6.3A3.5 3.5 0 0 0 6 1.1Z"
+        fill={filled ? "currentColor" : "none"}
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+      {!filled && <circle cx="6" cy="4.6" r="1.15" fill="currentColor" />}
+    </svg>
+  );
+}
 
 interface Props {
   sessions: SessionCard[];
@@ -35,6 +55,8 @@ interface Props {
    */
   needsInputSessionIds?: ReadonlySet<string>;
   onNewTask?: () => void;
+  /** Same modal as `onNewTask`, seeded with one project's path. */
+  onNewTaskInProject?: (cwd: string) => void;
   hasMore?: boolean;
   onLoadMore?: () => void;
 }
@@ -49,9 +71,12 @@ export function SessionList({
   managedPids,
   needsInputSessionIds,
   onNewTask,
+  onNewTaskInProject,
   hasMore,
   onLoadMore,
 }: Props) {
+  const { pinnedIds, isPinned, togglePinned } = useSessionPins();
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = q
@@ -64,7 +89,9 @@ export function SessionList({
         )
       : sessions.slice();
 
-    list.sort((a, b) => {
+    // Pins outrank run state: a pin is the user's own ordering, and a card that
+    // sank the moment its agent went idle would not be worth pinning.
+    return sortPinnedFirst(list, pinnedIds, (a, b) => {
       const ar = rankManagedCard(
         managedStatuses?.[a.id],
         a.isActive,
@@ -77,8 +104,7 @@ export function SessionList({
       );
       return ar - br;
     });
-    return list;
-  }, [sessions, query, managedStatuses, needsInputSessionIds]);
+  }, [sessions, query, managedStatuses, needsInputSessionIds, pinnedIds]);
 
   const searching = query.trim().length > 0;
   // A search already spans every project, so grouping its hits would only nest
@@ -86,6 +112,7 @@ export function SessionList({
   // session tree on each keystroke.
   const { groups, indexed, isCollapsed, toggleCollapsed } = useProjectGroups(
     searching ? NO_SESSIONS : visible,
+    { selectedId, pinnedIds },
   );
   const grouped = !searching && indexed && groups.length > 0;
 
@@ -96,10 +123,15 @@ export function SessionList({
     const needsInput = needsInputSessionIds?.has(s.id) ?? false;
     const state = resolveCardState(managedStatus, openElsewhere, needsInput);
     const pid = managedPids?.[s.id] ?? s.activePid ?? null;
+    const pinned = isPinned(s.id);
     const cardClass = [
       "session-card",
       selectedId === s.id ? "selected" : "",
       `state-${state}`,
+      // `open` is the one state we are not driving; the chrome says so in shape
+      // as well as colour, so keep the two families apart in one class.
+      state === "open" ? "run-elsewhere" : "",
+      pinned ? "pinned" : "",
     ]
       .filter(Boolean)
       .join(" ");
@@ -118,8 +150,25 @@ export function SessionList({
           state === "running" || state === "starting" ? true : undefined
         }
       >
+        <button
+          type="button"
+          className="session-pin"
+          aria-pressed={pinned}
+          title={pinned ? "Unpin from the top" : "Pin to the top"}
+          aria-label={
+            pinned ? `Unpin ${s.title}` : `Pin ${s.title} to the top`
+          }
+          onClick={(e) => {
+            // The card behind this button opens the session on click.
+            e.stopPropagation();
+            togglePinned(s.id);
+          }}
+        >
+          <PinGlyph filled={pinned} />
+        </button>
         {state !== "idle" && (
           <div className="card-status">
+            <span className="card-status-dot" aria-hidden />
             <span className="card-status-text">{stateLabel(state)}</span>
             {pid != null && (
               <span className="card-status-pid" title={`pid ${pid}`}>
@@ -214,6 +263,7 @@ export function SessionList({
             isCollapsed={isCollapsed}
             onToggle={toggleCollapsed}
             selectedId={selectedId}
+            onNewSession={onNewTaskInProject}
             renderSession={renderCard}
           />
         ) : (

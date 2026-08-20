@@ -676,6 +676,10 @@
  * Sticky: the task list is one scroller and a project can be taller than it, so
  * without this the header a card belongs to scrolls away from the card.
  * Near-opaque rather than the usual glass — cards pass underneath it.
+ *
+ * A row rather than one button, because the "+" beside the label is a second
+ * control: nesting it inside the collapse button would make every new task a
+ * collapse as well.
  */
 .project-group-header {
   position: sticky;
@@ -683,19 +687,12 @@
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   width: 100%;
-  box-sizing: border-box;
-  padding: 4px 8px 4px 6px;
-  border: none;
+  padding: 0 4px 0 0;
   border-radius: 0 8px 8px 0;
   background: color-mix(in srgb, var(--rp-base) 88%, transparent);
   color: var(--text-muted);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  text-align: left;
   min-width: 0;
   user-select: none;
 }
@@ -705,9 +702,76 @@
   color: var(--text);
 }
 
-.project-group-header:focus-visible {
+.project-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 4px 4px 6px;
+  border: none;
+  border-radius: 0 8px 8px 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.project-group-toggle:focus-visible {
   outline: none;
   box-shadow: 0 0 0 1px var(--accent);
+}
+
+/*
+ * Start a task in this project. Dim rather than hidden: a control that appears
+ * on hover is a control a keyboard user never finds.
+ */
+.project-group-new {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0.5;
+  transition:
+    opacity 0.12s ease,
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.project-group-header:hover .project-group-new {
+  opacity: 1;
+}
+
+.project-group-new:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.project-group-new:focus-visible {
+  opacity: 1;
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* Folder is gone — the modal would open on a path that cannot be spawned in. */
+.project-group-new:disabled {
+  opacity: 0.25;
+  cursor: default;
 }
 
 .project-group-caret {
@@ -761,4 +825,216 @@
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+}
+
+/* ── Task cards: run state, and the pin ──────────────────────────
+ * Selectors are scoped through `.session-cards` so they outrank the card rules
+ * in workspace.css, which loads after this file and which upstream owns.
+ */
+
+/*
+ * The pin floats over the card's top-right corner, so every card reserves that
+ * gutter — otherwise a long title or a pid slides underneath it.
+ */
+.session-cards .card-body {
+  padding-right: 24px;
+}
+
+.session-cards .card-status {
+  padding-right: 26px;
+  gap: 6px;
+}
+
+/*
+ * Run state you can read without reading it.
+ *
+ * `--run-accent` carries the one distinction the card already knows: pine while
+ * this app is driving the agent, Muted while the session is merely open in Grok
+ * Build. Hue alone would not survive a themed screen at a glance, so the two
+ * families differ in shape as well — solid and breathing here, segmented and
+ * still there.
+ */
+.session-cards .session-card {
+  --run-accent: var(--pine);
+  --run-accent-rgb: var(--pine-rgb);
+}
+
+/* Waiting on a human, not on a model: gold, the app's one "your turn" colour. */
+.session-cards .session-card.state-awaiting {
+  --run-accent: var(--warn);
+  --run-accent-rgb: var(--warn-rgb);
+  --card-status-fg: color-mix(in srgb, var(--warn) 35%, var(--text));
+  --card-status-mid: color-mix(in srgb, var(--warn) 30%, var(--bg-elevated));
+  --card-status-deep: color-mix(in srgb, var(--warn) 15%, var(--hl-low));
+}
+
+/* Someone else's process — present, but not ours to report on. */
+.session-cards .session-card.run-elsewhere {
+  --run-accent: var(--muted);
+  --run-accent-rgb: var(--rp-muted-rgb);
+  --card-status-fg: color-mix(in srgb, var(--muted) 30%, var(--text-muted));
+  --card-status-mid: color-mix(in srgb, var(--muted) 22%, var(--bg-elevated));
+  --card-status-deep: color-mix(in srgb, var(--muted) 10%, var(--hl-low));
+}
+
+/* Rail down the card's flat left edge — the part visible in peripheral vision. */
+.session-cards .session-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  z-index: 2;
+  pointer-events: none;
+  background: var(--run-accent);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.session-cards .session-card:not(.state-idle)::before {
+  opacity: 0.9;
+}
+
+/* Dashes read as "not continuous, not ours" even in a screenshot. */
+.session-cards .session-card.run-elsewhere::before {
+  opacity: 0.75;
+  background: repeating-linear-gradient(
+    180deg,
+    var(--run-accent) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+/* Mid-turn: the whole card leans pine, in time with the ribbon's sweep. */
+.session-cards .session-card.state-running {
+  border-color: color-mix(in srgb, var(--run-accent) 45%, var(--border));
+}
+
+.session-cards .session-card.state-running::before {
+  animation: session-run-rail 1.7s ease-in-out infinite;
+}
+
+.session-cards .session-card.state-starting::before {
+  animation: session-run-rail 2.3s ease-in-out infinite;
+}
+
+.session-cards .session-card.state-awaiting {
+  border-color: color-mix(in srgb, var(--run-accent) 40%, var(--border));
+}
+
+/* Pip at the head of the status ribbon: filled when ours, hollow when not. */
+.card-status-dot {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--run-accent);
+  box-shadow: 0 0 0 2px rgb(var(--run-accent-rgb) / 0.18);
+}
+
+.session-cards .session-card.run-elsewhere .card-status-dot {
+  background: transparent;
+  border: 1.5px solid var(--run-accent);
+  box-shadow: none;
+}
+
+.session-cards .session-card.state-running .card-status-dot,
+.session-cards .session-card.state-awaiting .card-status-dot {
+  animation: session-run-pip 1.7s ease-out infinite;
+}
+
+@keyframes session-run-rail {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Ring stays inside 3px: the ribbon clips its overflow, and a halo sheared off
+   at the ribbon's edge reads as a rendering bug rather than a pulse. */
+@keyframes session-run-pip {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(var(--run-accent-rgb) / 0.45);
+  }
+  70% {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 3px rgb(var(--run-accent-rgb) / 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(var(--run-accent-rgb) / 0);
+  }
+}
+
+/*
+ * Pin. Always rendered and always in the tab order — a control that only exists
+ * on hover is a control a keyboard cannot reach — so it merely dims until the
+ * card is hovered, the button focused, or the task actually pinned.
+ */
+.session-pin {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.4;
+  transition:
+    opacity 0.12s ease,
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.session-card:hover .session-pin {
+  opacity: 1;
+}
+
+.session-pin:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.session-pin:focus-visible {
+  opacity: 1;
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.session-card.pinned .session-pin {
+  opacity: 1;
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-cards .session-card::before,
+  .session-cards .session-card .card-status-dot {
+    animation: none;
+    transition: none;
+  }
+
+  /* No breathing, so the running rail states its case by staying at full. */
+  .session-cards .session-card.state-running::before {
+    opacity: 1;
+  }
+
+  .session-pin,
+  .project-group-new {
+    transition: none;
+  }
 }
