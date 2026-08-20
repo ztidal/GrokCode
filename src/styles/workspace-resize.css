@@ -1,0 +1,72 @@
+/* Right workspace rail: drag-to-resize handle, and a collapse that hides the
+ * panel instead of unmounting it. Loaded after workspace.css so the few
+ * overrides here win without raising specificity. */
+
+.workspace-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  /* .side-panel clips overflow, so the whole hit area has to sit inside it. */
+  width: 6px;
+  z-index: 3;
+  cursor: col-resize;
+  background: transparent;
+  user-select: none;
+  touch-action: none;
+}
+
+/* The column already has a border; this only marks the handle as live. */
+.workspace-resize-handle::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.workspace-resize-handle:hover::after,
+.workspace-resize-handle:focus-visible::after,
+.workspace-resize-handle.is-resizing::after {
+  opacity: 0.72;
+}
+
+/* The bar above is the focus affordance — a ring on a 6px strip is a smudge. */
+.workspace-resize-handle:focus-visible {
+  outline: none;
+}
+
+/* The track has to track the pointer, so no easing mid-drag, and nothing in
+ * the shell may start a selection the drag would then paint. */
+.main-grid.is-resizing {
+  transition: none;
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* Collapse hides this instead of unmounting WorkspacePanel: unmounting threw
+ * away the file-tree selection and the Files/Git tab on every ctrl+h. */
+.workspace-panel-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-panel-body[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main-grid {
+    transition: none;
+  }
+
+  .workspace-resize-handle::after {
+    transition: none;
+  }
+}

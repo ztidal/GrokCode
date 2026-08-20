@@ -3,8 +3,10 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  /* Left rail ~60% of previous 300px; middle/right share remaining width evenly. */
-  grid-template-columns: 180px minmax(0, 1fr) minmax(0, 1fr);
+  /* Left rail ~60% of previous 300px; middle/right share remaining width
+   * evenly until the splitter pins the right rail to a px width. */
+  grid-template-columns:
+    180px minmax(0, 1fr) var(--workspace-w, minmax(0, 1fr));
   gap: 0;
   contain: layout;
   transition: grid-template-columns 160ms ease;
@@ -48,6 +50,8 @@
   background: var(--bg);
   padding-bottom: 0;
   overflow: hidden;
+  /* Anchors the absolutely positioned resize handle on the left edge. */
+  position: relative;
   /* Divider between middle (detail) and right (workspace) columns. */
   border-left: 1px solid var(--border);
 }

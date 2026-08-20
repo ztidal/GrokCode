@@ -26,6 +26,7 @@ import { StatsBar } from "./components/StatsBar";
 import { UpdateModal } from "./components/UpdateModal";
 import { WindowsTitlebar } from "./components/WindowsTitlebar";
 import { WorkspacePanel } from "./components/WorkspacePanel";
+import { WorkspaceSplitter } from "./components/WorkspaceSplitter";
 import { useAgentEvents } from "./hooks/useAgentEvents";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { usePromptQueueController } from "./hooks/usePromptQueueController";
@@ -35,6 +36,7 @@ import { useSessionIndex } from "./hooks/useSessionIndex";
 import { useSlashCommandCatalog } from "./hooks/useSlashCommandCatalog";
 import { useTimelineHistory } from "./hooks/useTimelineHistory";
 import { useUsageMetrics } from "./hooks/useUsageMetrics";
+import { useWorkspaceWidth } from "./hooks/useWorkspaceWidth";
 import type {
   MainTab,
   ManagedAgentInfo,
@@ -118,8 +120,10 @@ function App() {
    * (see openPreview). Relative paths from markdown/tools are normalized here.
    */
   const [previewPath, setPreviewPath] = useState<string | null>(null);
-  /** Right workspace rail collapsed (Ctrl+H). */
-  const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
+  /** Right workspace rail: dragged width + collapse (Ctrl+H), both persisted. */
+  const workspace = useWorkspaceWidth();
+  const workspaceCollapsed = workspace.collapsed;
+  const toggleWorkspaceCollapsed = workspace.toggleCollapsed;
 
   const planMode = useSessionPlanMode();
   const sessionModel = useSessionModel();
@@ -866,16 +870,12 @@ function App() {
         (e.key === "h" || e.key === "H")
       ) {
         e.preventDefault();
-        setWorkspaceCollapsed((v) => !v);
+        toggleWorkspaceCollapsed();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  const toggleWorkspaceCollapsed = useCallback(() => {
-    setWorkspaceCollapsed((v) => !v);
-  }, []);
+  }, [toggleWorkspaceCollapsed]);
 
   const workspaceCollapseBtn = (
     <button
@@ -956,8 +956,11 @@ function App() {
 
       <div
         className={
-          "main-grid" + (workspaceCollapsed ? " workspace-collapsed" : "")
+          "main-grid" +
+          (workspaceCollapsed ? " workspace-collapsed" : "") +
+          (workspace.resizing ? " is-resizing" : "")
         }
+        style={workspace.gridStyle}
       >
         <aside className="left-rail">
           <MacosTitlebarBrand
@@ -1048,13 +1051,27 @@ function App() {
         />
 
         <aside
+          ref={workspace.panelRef}
           className={
             "side-panel workspace-panel" +
             (workspaceCollapsed ? " is-collapsed" : "")
           }
           aria-label="Workspace"
         >
-          {workspaceCollapsed ? (
+          {!workspaceCollapsed && (
+            <WorkspaceSplitter
+              widthPx={workspace.widthPx}
+              minWidthPx={workspace.minWidthPx}
+              maxWidthPx={workspace.maxWidthPx}
+              resizing={workspace.resizing}
+              onPointerDown={workspace.onResizePointerDown}
+              onPointerMove={workspace.onResizePointerMove}
+              onPointerUp={workspace.onResizePointerUp}
+              onNudge={workspace.nudgeWidth}
+              onReset={workspace.resetWidth}
+            />
+          )}
+          {workspaceCollapsed && (
             <button
               type="button"
               className="workspace-expand-rail"
@@ -1069,7 +1086,10 @@ function App() {
               </span>
               <span className="workspace-expand-text">Workspace</span>
             </button>
-          ) : (
+          )}
+          {/* Hidden, never unmounted — collapse must not discard the file
+              tree, its scroll position or the Files/Git tab. */}
+          <div className="workspace-panel-body" hidden={workspaceCollapsed}>
             <WorkspacePanel
               cwd={projectCwd}
               refreshKey={gitRefreshKey}
@@ -1078,7 +1098,7 @@ function App() {
               sessionId={selectedId}
               collapseControl={workspaceCollapseBtn}
             />
-          )}
+          </div>
         </aside>
       </div>
 
