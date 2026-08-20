@@ -41,7 +41,6 @@ use project_fs::{DirEntry, GitBranchInfo, GitChange, GitFileDiff};
 use serde_json::Value;
 use skill_catalog::AvailableCommandInfo;
 use std::collections::HashMap;
-use std::path::Path;
 use tauri::Manager;
 
 #[tauri::command]
@@ -477,16 +476,15 @@ fn list_task_permission_modes() -> HashMap<String, PermissionMode> {
     task_prefs::all_permission_modes()
 }
 
-/// Default permission for New Task / seed. Optional `project_cwd` pulls in
-/// project-layer config when the modal knows a workspace root.
+/// Default permission for New Task / seed.
+///
+/// `_project_cwd` is accepted and ignored: upstream used it to pull in a
+/// workspace config layer, which we removed so that a cloned repository cannot
+/// choose the mode its own tasks start in. The argument stays in the signature
+/// only to keep the IPC contract identical to upstream's.
 #[tauri::command]
-fn get_last_spawn_permission_mode(project_cwd: Option<String>) -> PermissionMode {
-    let cwd = project_cwd
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(Path::new);
-    task_prefs::effective_permission_mode(None, cwd)
+fn get_last_spawn_permission_mode(_project_cwd: Option<String>) -> PermissionMode {
+    task_prefs::effective_permission_mode(None)
 }
 
 #[tauri::command]

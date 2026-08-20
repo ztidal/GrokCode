@@ -111,7 +111,7 @@ fn usage_persist_lock() -> &'static Mutex<()> {
 
 #[cfg(not(test))]
 fn usage_cache_path() -> PathBuf {
-    crate::config::pinkcode_home().join("session_usage.json")
+    crate::config::app_home().join("session_usage.json")
 }
 
 #[cfg(not(test))]

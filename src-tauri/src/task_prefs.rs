@@ -37,7 +37,7 @@ static STORE: OnceLock<Store> = OnceLock::new();
 const PREFS_PRUNE_THRESHOLD: usize = 2_048;
 
 fn prefs_dir() -> PathBuf {
-    crate::config::pinkcode_home()
+    crate::config::app_home()
 }
 
 fn store() -> &'static Store {
@@ -129,19 +129,28 @@ pub fn last_spawn_mode_raw() -> Option<PermissionMode> {
 /// - `project_cwd`: when set, project `.pinkcode/config.json` participates in
 ///   the layered default (see [`crate::config::resolve`]).
 ///
-/// New Task seed: `effective_permission_mode(None, project_cwd)`.
-/// Attach without request mode: `effective_permission_mode(Some(id), Some(cwd))`.
-pub fn effective_permission_mode(
-    session_id: Option<&str>,
-    project_cwd: Option<&Path>,
-) -> PermissionMode {
+/// New Task seed: `effective_permission_mode(None)`.
+/// Attach without request mode: `effective_permission_mode(Some(id))`.
+///
+/// Takes no working directory: the workspace has no say in the mode its own
+/// tasks start in (see [`crate::config`]).
+pub fn effective_permission_mode(session_id: Option<&str>) -> PermissionMode {
     if let Some(id) = session_id {
         if let Some(mode) = get_permission_mode(id) {
             return mode;
         }
     }
-    last_spawn_mode_raw()
-        .unwrap_or_else(|| crate::config::resolve(project_cwd).default_permission_mode)
+    last_spawn_mode_raw().unwrap_or_else(|| crate::config::resolve().default_permission_mode)
+}
+
+/// Whether a spawn's mode may become the Sticky Seed for later tasks.
+///
+/// `BypassPermissions` may not. It is the one mode that skips the host
+/// permission gate entirely, so letting it persist turns a single
+/// `/always-approve` into the starting mode for all subsequent work, with
+/// nothing on screen to say so. Every other mode still reaches the gate.
+pub fn may_persist_as_seed(mode: PermissionMode) -> bool {
+    mode != PermissionMode::BypassPermissions
 }
 
 pub fn set_last_spawn_mode(mode: PermissionMode) -> Result<(), String> {
@@ -210,6 +219,21 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    /// Escalating one task must not choose the starting mode for the next one.
+    #[test]
+    fn always_approve_never_becomes_the_sticky_seed() {
+        assert!(!may_persist_as_seed(PermissionMode::BypassPermissions));
+        // Everything else still reaches the host gate, so it may stay sticky.
+        for mode in [
+            PermissionMode::Default,
+            PermissionMode::Auto,
+            PermissionMode::AcceptEdits,
+            PermissionMode::DontAsk,
+        ] {
+            assert!(may_persist_as_seed(mode), "{mode:?} should stay sticky");
+        }
+    }
 
     static TEST_SEQ: AtomicU64 = AtomicU64::new(0);
 

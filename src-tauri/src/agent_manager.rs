@@ -1203,7 +1203,10 @@ impl AgentManager {
         }
         let permission_mode = PermissionMode::from_request(req.permission_mode, req.always_approve);
         let always_approve = permission_mode.spawns_always_approve();
-        task_prefs::set_last_spawn_mode(permission_mode)?;
+        // Always-approve applies to the task it was chosen for, and no further.
+        if task_prefs::may_persist_as_seed(permission_mode) {
+            task_prefs::set_last_spawn_mode(permission_mode)?;
+        }
         let handle_id = Uuid::new_v4().to_string();
 
         // Top-level flags (before `agent`) vs agent-subcommand flags (after).
@@ -1337,7 +1340,7 @@ impl AgentManager {
             (None, Some(true)) => PermissionMode::BypassPermissions,
             // Session prefs → last-spawn → layered config (project-aware).
             (None, Some(false)) | (None, None) => {
-                task_prefs::effective_permission_mode(Some(&session_id), Some(Path::new(&cwd)))
+                task_prefs::effective_permission_mode(Some(&session_id))
             }
         };
         let always_approve = permission_mode.spawns_always_approve();

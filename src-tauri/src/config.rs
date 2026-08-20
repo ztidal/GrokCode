@@ -1,17 +1,22 @@
-//! Layered PinkCode host configuration (log level + default permission mode).
+//! Layered ZtidalCode host configuration (log level + default permission mode).
 //!
 //! Priority for [`resolve`] (later wins):
 //! 1. Built-in defaults
 //! 2. Environment (`PINKCODE_*`) — seed when files omit a field; files override env
-//! 3. Global file `~/.pinkcode/config.json`
-//! 4. Project file `<cwd>/.pinkcode/config.json` — only when `project_cwd` is `Some`
+//! 3. Global file `~/.ztidalcode/config.json`
+//!
+//! There is deliberately no project-level layer. Upstream reads
+//! `<cwd>/.pinkcode/config.json`, which lets a cloned repository choose the
+//! permission mode its own tasks start in, with no prompt. Config is host state,
+//! not repository content — do not reintroduce a workspace layer when merging
+//! upstream.
 //!
 //! Session-scoped permission / plan prefs live in [`crate::task_prefs`] and are
 //! **not** merged here. Callers should use
 //! [`crate::task_prefs::effective_permission_mode`] (session → last-spawn → this
 //! resolve) rather than inventing their own fallback chain.
 //!
-//! Startup tracing uses `resolve(None)` (env + global only). Config files are
+//! Startup tracing uses `resolve()` (env + global only). Config files are
 //! read-only from the host today (no settings UI); write path lives in tests
 //! via [`crate::fs_atomic`].
 
@@ -67,19 +72,17 @@ fn default_log_level() -> &'static str {
     }
 }
 
-/// `~/.pinkcode`
-pub fn pinkcode_home() -> PathBuf {
+/// `~/.ztidalcode` — host state for this build only. Upstream PinkCode uses
+/// `~/.pinkcode`; the two apps ship separate bundle identifiers and must not
+/// share a config file.
+pub fn app_home() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".pinkcode")
+        .join(".ztidalcode")
 }
 
 pub fn global_config_path() -> PathBuf {
-    pinkcode_home().join("config.json")
-}
-
-pub fn project_config_path(cwd: &Path) -> PathBuf {
-    cwd.join(".pinkcode").join("config.json")
+    app_home().join("config.json")
 }
 
 fn load_layer_file(path: &Path) -> Result<ConfigLayer, String> {
@@ -156,27 +159,18 @@ fn finalize(merged: ConfigLayer) -> ResolvedConfig {
     }
 }
 
-/// Merge defaults → env → global → optional project (later wins).
+/// Merge defaults → env → global (later wins).
 /// Session-level prefs live in `task_prefs` and are applied by callers.
-pub fn resolve(project_cwd: Option<&Path>) -> ResolvedConfig {
+///
+/// Takes no working directory: nothing a repository ships may influence the
+/// permission mode its tasks start in.
+pub fn resolve() -> ResolvedConfig {
     let mut merged = defaults_layer();
     merged.merge_from(&layer_from_env());
     match load_layer_file(&global_config_path()) {
         Ok(global) => merged.merge_from(&global),
         Err(error) => {
-            tracing::warn!(error = %error, "failed to load global PinkCode config");
-        }
-    }
-    if let Some(cwd) = project_cwd {
-        match load_layer_file(&project_config_path(cwd)) {
-            Ok(project) => merged.merge_from(&project),
-            Err(error) => {
-                tracing::warn!(
-                    error = %error,
-                    cwd = %cwd.display(),
-                    "failed to load project PinkCode config"
-                );
-            }
+            tracing::warn!(error = %error, "failed to load global ZtidalCode config");
         }
     }
     finalize(merged)
@@ -188,7 +182,7 @@ pub fn resolve(project_cwd: Option<&Path>) -> ResolvedConfig {
 pub fn init_tracing() {
     use tracing_subscriber::EnvFilter;
 
-    let cfg = resolve(None);
+    let cfg = resolve();
     let filter = match EnvFilter::try_from_default_env() {
         Ok(f) => f,
         Err(_) => {
@@ -211,12 +205,12 @@ pub fn init_tracing() {
 
     if let Err(error) = result {
         // Already initialized (tests / double run) — not fatal.
-        eprintln!("[pinkcode] tracing init skipped: {error}");
+        eprintln!("[ztidalcode] tracing init skipped: {error}");
     } else {
         tracing::info!(
             log_level = %cfg.log_level,
             default_permission = ?cfg.default_permission_mode,
-            "PinkCode config resolved"
+            "ZtidalCode config resolved"
         );
     }
 }
@@ -273,14 +267,14 @@ mod tests {
     }
 
     #[test]
-    fn project_file_roundtrip() {
+    fn global_file_roundtrip() {
         // Disk load only — does not call resolve() (avoids real home/env).
         let dir = temp_dir();
         let layer = ConfigLayer {
             log_level: Some("warn".into()),
             default_permission_mode: Some(PermissionMode::AcceptEdits),
         };
-        let path = project_config_path(&dir);
+        let path = dir.join("config.json");
         write_layer(&path, &layer).expect("write");
         assert!(path.is_file());
         let loaded = load_layer_file(&path).expect("load");
@@ -288,9 +282,35 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    /// A repository may ship any config it likes; none of it is a config layer.
+    /// Guards the deliberate removal of upstream's `<cwd>/.pinkcode` layer.
     #[test]
-    fn merge_then_finalize_project_wins() {
-        // Isolated pure merge — no real ~/.pinkcode or process env.
+    fn repository_config_is_not_a_layer() {
+        let dir = temp_dir();
+        for name in [".pinkcode", ".ztidalcode"] {
+            let planted = dir.join(name).join("config.json");
+            write_layer(
+                &planted,
+                &ConfigLayer {
+                    log_level: None,
+                    default_permission_mode: Some(PermissionMode::BypassPermissions),
+                },
+            )
+            .expect("write");
+            assert!(planted.is_file(), "fixture not written for {name}");
+        }
+        // The only file `resolve` consults is the global one.
+        assert_eq!(global_config_path(), app_home().join("config.json"));
+        assert!(
+            !global_config_path().starts_with(&dir),
+            "global config must not resolve inside a workspace"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn merge_then_finalize_later_layer_wins() {
+        // Isolated pure merge — no real ~/.ztidalcode or process env.
         let mut merged = defaults_layer();
         merged.merge_from(&ConfigLayer {
             log_level: Some("trace".into()),
@@ -311,7 +331,7 @@ mod tests {
     #[test]
     fn missing_file_is_empty_layer() {
         let dir = temp_dir();
-        let loaded = load_layer_file(&project_config_path(&dir)).expect("load");
+        let loaded = load_layer_file(&dir.join("config.json")).expect("load");
         assert!(loaded.log_level.is_none());
         assert!(loaded.default_permission_mode.is_none());
         let _ = fs::remove_dir_all(&dir);
