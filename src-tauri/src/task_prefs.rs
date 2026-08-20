@@ -464,3 +464,26 @@ mod tests {
         cleanup(&path);
     }
 }
+
+#[cfg(test)]
+mod compatibility {
+    //! The prefs document outlives the build that wrote it — a user upgrading
+    //! carries one written by the previous version.
+    use super::*;
+
+    /// Removing `lastSpawnMode` from the struct must not cost anyone their
+    /// stored per-task modes. `TaskPrefsFile` sets no `deny_unknown_fields`, so
+    /// the stale key is ignored and disappears on the next write; this pins that
+    /// so a later `deny_unknown_fields` cannot silently wipe the document.
+    #[test]
+    fn a_document_written_by_an_older_build_still_loads() {
+        let raw = r#"{"sessions":{"abc":"auto"},"planArmed":{"abc":true},"lastSpawnMode":"default"}"#;
+        let parsed: TaskPrefsFile = serde_json::from_str(raw).expect("legacy doc must still load");
+        assert_eq!(
+            parsed.sessions.get("abc").copied(),
+            Some(PermissionMode::Auto),
+            "stored per-session modes must survive the field removal"
+        );
+        assert!(parsed.plan_armed.get("abc").copied().unwrap_or(false));
+    }
+}
