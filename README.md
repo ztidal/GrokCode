@@ -37,7 +37,7 @@ owns the agent-facing core; we own only what makes the app safe and distributabl
 | Change | Why |
 |---|---|
 | **A repository cannot set its own permission mode.** Upstream merged `<cwd>/.pinkcode/config.json` as the highest-priority config layer; the layer is removed. | Cloning a repo that shipped one seeded its tasks — including at always-approve — with no prompt. |
-| **Always-approve is not sticky.** Choosing it applies to that task only; it never becomes the starting mode for later tasks. | One `/always-approve` used to become the default for all subsequent work, with nothing on screen to say so. |
+| **Full permissions is the configured default, and always-approve still never writes itself into the sticky seed.** New tasks start with the agent approving tool calls; the mode on screen comes from a constant you can read in `config.rs`, not from a residue of one earlier task. | The team works in repositories it already trusts. Escalation still cannot *spread* on its own — see [ADR-0002](docs/adr/0002-no-permission-policy-layer.md) for what that does and does not buy. |
 | **Shell calls are never auto-approved on plan.md path text.** | A command merely *containing* the session plan path was auto-approved in every mode, `Don't ask` included. |
 | **`auth.json` is replaced atomically and stays owner-only.** | The highest-consequence write in the app was the one skipping the project's own atomic-write helper. |
 | **The mode chip names the real mode.** `Accept edits` and `Don't ask` used to display as "Ask before tools". | The indicator was wrong exactly where it mattered most. |

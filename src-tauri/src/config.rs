@@ -16,6 +16,10 @@
 //! [`crate::task_prefs::effective_permission_mode`] (session → last-spawn → this
 //! resolve) rather than inventing their own fallback chain.
 //!
+//! The built-in default is [`DEFAULT_PERMISSION_MODE`] — full permissions. It is
+//! the weakest layer in the stack, so env, the global file, the Sticky Seed and
+//! the per-task choice all still move away from it. See ADR-0002.
+//!
 //! Startup tracing uses `resolve()` (env + global only). Config files are
 //! read-only from the host today (no settings UI); write path lives in tests
 //! via [`crate::fs_atomic`].
@@ -24,6 +28,23 @@ use crate::agent_types::PermissionMode;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+/// Permission mode a task starts in when nothing else has chosen one.
+///
+/// `BypassPermissions` — the team runs the agent on repositories it already
+/// trusts, and an approval prompt on every tool call was answered "yes" often
+/// enough that the prompt stopped carrying information. This is a Seed, not a
+/// ceiling: it is the *first* layer, so env, the global file, the Sticky Seed
+/// and the task's own choice each override it, and moving down to `Default` is
+/// one click in the New Task modal.
+///
+/// It does not weaken the guards around *how* a mode is reached: config still
+/// takes no working directory (a repository cannot pick its own mode), and
+/// [`crate::task_prefs::may_persist_as_seed`] still refuses to write this mode
+/// into the Sticky Seed — the seed stays empty and this constant keeps
+/// answering, so the value on screen is a decision someone can read here rather
+/// than a residue of one earlier task. See ADR-0002.
+const DEFAULT_PERMISSION_MODE: PermissionMode = PermissionMode::BypassPermissions;
 
 /// On-disk / env-mergeable config document (all fields optional).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -59,7 +80,7 @@ impl Default for ResolvedConfig {
     fn default() -> Self {
         Self {
             log_level: default_log_level().to_string(),
-            default_permission_mode: PermissionMode::Default,
+            default_permission_mode: DEFAULT_PERMISSION_MODE,
         }
     }
 }
@@ -142,7 +163,7 @@ fn parse_permission_mode_env(raw: &str) -> Option<PermissionMode> {
 fn defaults_layer() -> ConfigLayer {
     ConfigLayer {
         log_level: Some(default_log_level().to_string()),
-        default_permission_mode: Some(PermissionMode::Default),
+        default_permission_mode: Some(DEFAULT_PERMISSION_MODE),
     }
 }
 
@@ -155,7 +176,7 @@ fn finalize(merged: ConfigLayer) -> ResolvedConfig {
             .unwrap_or_else(|| default_log_level().to_string()),
         default_permission_mode: merged
             .default_permission_mode
-            .unwrap_or(PermissionMode::Default),
+            .unwrap_or(DEFAULT_PERMISSION_MODE),
     }
 }
 
@@ -326,6 +347,46 @@ mod tests {
             resolved.default_permission_mode,
             PermissionMode::AcceptEdits
         );
+    }
+
+    /// The stated posture of the fork: a task nobody has configured starts with
+    /// full permissions (ADR-0002).
+    #[test]
+    fn a_task_nobody_configured_starts_with_full_permissions() {
+        assert_eq!(
+            finalize(defaults_layer()).default_permission_mode,
+            PermissionMode::BypassPermissions
+        );
+        // The struct default is the same decision, for callers that skip resolve().
+        assert_eq!(
+            ResolvedConfig::default().default_permission_mode,
+            PermissionMode::BypassPermissions
+        );
+    }
+
+    /// Full permissions is a Seed, not a ceiling — any later layer moves off it,
+    /// including back down to Ask.
+    #[test]
+    fn a_later_layer_can_take_the_default_back_down_to_ask() {
+        let mut merged = defaults_layer();
+        merged.merge_from(&ConfigLayer {
+            log_level: None,
+            default_permission_mode: Some(PermissionMode::Default),
+        });
+        assert_eq!(
+            finalize(merged).default_permission_mode,
+            PermissionMode::Default
+        );
+    }
+
+    /// The default is deliberately a mode `task_prefs` refuses to persist. The
+    /// value therefore keeps coming from this file, where it can be read and
+    /// changed, instead of hardening into a residue of one earlier task.
+    #[test]
+    fn the_default_is_still_not_allowed_to_become_the_sticky_seed() {
+        assert!(!crate::task_prefs::may_persist_as_seed(
+            finalize(defaults_layer()).default_permission_mode
+        ));
     }
 
     #[test]
