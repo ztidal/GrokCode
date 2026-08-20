@@ -1,5 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useId, useRef, useState } from "react";
+import { openNewWindow } from "../api";
 import { ThemeToggle } from "./ThemeToggle";
 import logoMark from "../assets/logo.png";
 import type { UpdateCheckStatus } from "../hooks/useAppUpdate";
@@ -22,6 +23,7 @@ export function WindowsTitlebar({
   onWindowError: (message: string) => void;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [openingWindow, setOpeningWindow] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const settingsTriggerRef = useRef<HTMLButtonElement>(null);
   const settingsPanelId = useId();
@@ -59,6 +61,21 @@ export function WindowsTitlebar({
     invoke: () => Promise<void>,
   ) => {
     void runWindowCommand(command, invoke, onWindowError);
+  };
+
+  // A second window is a second process, so it takes long enough to be worth
+  // showing — and long enough for an impatient second click to start a third.
+  const openWindow = async () => {
+    setOpeningWindow(true);
+    try {
+      await openNewWindow();
+      setSettingsOpen(false);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      onWindowError(`Failed to open a new window: ${detail}`);
+    } finally {
+      setOpeningWindow(false);
+    }
   };
 
   return (
@@ -101,6 +118,20 @@ export function WindowsTitlebar({
             id={settingsPanelId}
             aria-label="Settings"
           >
+            <button
+              className="windows-settings-item"
+              type="button"
+              disabled={openingWindow}
+              onClick={() => {
+                void openWindow();
+              }}
+            >
+              <span>New Window</span>
+              {openingWindow ? (
+                <span className="windows-settings-item-status">Opening…</span>
+              ) : null}
+            </button>
+            <div className="windows-settings-separator" aria-hidden />
             <button
               className="windows-settings-item"
               type="button"

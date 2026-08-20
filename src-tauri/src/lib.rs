@@ -10,6 +10,7 @@ mod config;
 mod fs_atomic;
 mod json_util;
 mod models;
+mod multi_instance;
 mod permission_policy;
 mod plan_approval;
 mod plan_file_policy;
@@ -607,6 +608,20 @@ async fn git_apply_patch(cwd: String, patch: String, reverse: bool) -> Result<()
         .map_err(|e| format!("git apply patch task failed: {e}"))?
 }
 
+/// Open another ZtidalCode window for a second project.
+///
+/// A new OS process, not a `WebviewWindow`: `capabilities/default.json` binds
+/// every permission to the window label `main`, so an in-process sibling would
+/// paint and then fail every IPC call it made. The two processes share
+/// `~/.ztidalcode`, which `multi_instance` locks (see `task_prefs`).
+#[tauri::command]
+async fn open_new_window() -> Result<multi_instance::NewInstance, String> {
+    // Process creation is a blocking syscall — keep it off the command path.
+    tauri::async_runtime::spawn_blocking(multi_instance::launch_sibling_instance)
+        .await
+        .map_err(|e| format!("new window task failed: {e}"))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Layered config + structured logging before any agent/watcher work.
@@ -708,6 +723,7 @@ pub fn run() {
             git_apply_patch,
             project_groups::list_project_groups,
             project_groups::list_project_group_sessions,
+            open_new_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

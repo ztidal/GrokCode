@@ -140,6 +140,13 @@
   opacity: 0.68;
 }
 
+/* Trailing note on a Settings item, e.g. New Window while its process starts. */
+.windows-settings-item-status {
+  color: var(--text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
 .windows-update-status {
   flex-shrink: 0;
   align-self: center;

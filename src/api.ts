@@ -16,6 +16,7 @@ import type {
   ListSubagentsResult,
   ListTasksResult,
   ManagedAgentInfo,
+  NewWindowInstance,
   PendingPermission,
   PermissionMode,
   ProjectGroup,
@@ -502,4 +503,16 @@ export async function listProjectGroupSessions(
     offset: offset ?? null,
     limit: limit ?? null,
   });
+}
+
+/**
+ * Open another ZtidalCode window, for a second project alongside this one.
+ *
+ * The host launches a separate OS process rather than a `WebviewWindow`: the
+ * app's capabilities are scoped to the window label `main`, so an in-process
+ * sibling would come up without IPC. Resolves once the process has started —
+ * its window paints a moment later, on its own.
+ */
+export async function openNewWindow(): Promise<NewWindowInstance> {
+  return invoke<NewWindowInstance>("open_new_window");
 }

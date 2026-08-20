@@ -114,9 +114,19 @@ fn usage_cache_path() -> PathBuf {
     crate::config::app_home().join("session_usage.json")
 }
 
+/// Short: the ledger is rebuildable, so a window that cannot get the lock is
+/// better off skipping this persist than making a person wait for it.
+#[cfg(not(test))]
+const PERSIST_LOCK_WAIT: std::time::Duration = std::time::Duration::from_millis(750);
+
 #[cfg(not(test))]
 fn load_persisted_usage_cache() -> HashMap<PathBuf, UsageCacheEntry> {
-    let Ok(raw) = fs::read_to_string(usage_cache_path()) else {
+    load_persisted_entries(&usage_cache_path())
+}
+
+#[cfg(not(test))]
+fn load_persisted_entries(path: &Path) -> HashMap<PathBuf, UsageCacheEntry> {
+    let Ok(raw) = fs::read_to_string(path) else {
         return HashMap::new();
     };
     let Ok(file) = serde_json::from_str::<UsageCacheFile>(&raw) else {
@@ -127,6 +137,29 @@ fn load_persisted_usage_cache() -> HashMap<PathBuf, UsageCacheEntry> {
     } else {
         HashMap::new()
     }
+}
+
+/// Fold this process's ledger into the one already on disk.
+///
+/// Neither copy is authoritative — two windows browse different sessions — but
+/// entries are self-validating: [`session_token_usage`] rebuilds any whose
+/// identity, length or mtime no longer matches the log. So ours wins, except
+/// where a sibling has scanned the same file further than we have. Last writer
+/// wins would instead have the two windows delete each other's scan offsets and
+/// re-read whole update logs to recover them.
+fn merge_usage_entries(
+    mut on_disk: HashMap<PathBuf, UsageCacheEntry>,
+    ours: HashMap<PathBuf, UsageCacheEntry>,
+) -> HashMap<PathBuf, UsageCacheEntry> {
+    for (path, entry) in ours {
+        let sibling_is_ahead = on_disk.get(&path).is_some_and(|theirs| {
+            theirs.identity == entry.identity && theirs.scan_offset > entry.scan_offset
+        });
+        if !sibling_is_ahead {
+            on_disk.insert(path, entry);
+        }
+    }
+    on_disk
 }
 
 #[cfg(test)]
@@ -147,13 +180,26 @@ fn modified_nanos(metadata: &fs::Metadata) -> Option<u64> {
 #[cfg(not(test))]
 pub fn persist_session_usage_cache() {
     let _persist_guard = usage_persist_lock().lock();
-    let mut entries = usage_cache().lock().clone();
+    let path = usage_cache_path();
+    // Another ZtidalCode window rewrites this same file, so the write needs the
+    // cross-process lock as well as the in-process one — and what we write is a
+    // merge, not our own map, because we would otherwise drop their entries.
+    let _cross_process_guard =
+        match crate::multi_instance::lock_sidecar_within(&path, PERSIST_LOCK_WAIT) {
+            Ok(guard) => guard,
+            Err(error) => {
+                tracing::debug!(error = %error, "skipped session usage cache persist");
+                return;
+            }
+        };
+    let mut entries =
+        merge_usage_entries(load_persisted_entries(&path), usage_cache().lock().clone());
     entries.retain(|path, _| path.exists());
     let file = UsageCacheFile {
         version: 1,
         entries,
     };
-    if let Err(error) = crate::fs_atomic::write_json_atomic(&usage_cache_path(), &file) {
+    if let Err(error) = crate::fs_atomic::write_json_atomic(&path, &file) {
         tracing::warn!(error = %error, "failed to persist session usage cache");
     }
 }
@@ -556,5 +602,68 @@ mod tests {
 
         assert_eq!(session_token_usage(&path).total_tokens, 200);
         fs::remove_file(path).expect("remove replacement log");
+    }
+
+    fn test_identity(seed: u64) -> FileIdentity {
+        #[cfg(unix)]
+        {
+            FileIdentity {
+                device: 1,
+                inode: seed,
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            FileIdentity {
+                prefix_fingerprint: Some(seed),
+            }
+        }
+    }
+
+    fn test_entry(identity_seed: u64, scan_offset: u64, total_tokens: u64) -> UsageCacheEntry {
+        UsageCacheEntry {
+            identity: test_identity(identity_seed),
+            modified_nanos: Some(1),
+            len: scan_offset,
+            scan_offset,
+            prompt_ids: HashSet::new(),
+            usage: SessionTokenUsage {
+                total_tokens,
+                incomplete: false,
+                available: true,
+            },
+        }
+    }
+
+    /// Two windows persist the whole ledger; neither may erase the other's.
+    #[test]
+    fn persisting_merges_a_sibling_windows_ledger() {
+        let only_theirs = PathBuf::from("/sessions/theirs/updates.jsonl");
+        let only_ours = PathBuf::from("/sessions/ours/updates.jsonl");
+        let they_scanned_further = PathBuf::from("/sessions/shared/updates.jsonl");
+        let they_read_a_replaced_log = PathBuf::from("/sessions/replaced/updates.jsonl");
+
+        let on_disk = HashMap::from([
+            (only_theirs.clone(), test_entry(1, 500, 50)),
+            (they_scanned_further.clone(), test_entry(2, 900, 90)),
+            (they_read_a_replaced_log.clone(), test_entry(3, 900, 90)),
+        ]);
+        let ours = HashMap::from([
+            (only_ours.clone(), test_entry(4, 100, 10)),
+            (they_scanned_further.clone(), test_entry(2, 200, 20)),
+            // Same path, different file: their offsets describe a log that no
+            // longer exists, so ours is the one worth keeping.
+            (they_read_a_replaced_log.clone(), test_entry(5, 200, 20)),
+        ]);
+
+        let merged = merge_usage_entries(on_disk, ours);
+        assert_eq!(merged.len(), 4);
+        assert_eq!(merged[&only_theirs].usage.total_tokens, 50);
+        assert_eq!(merged[&only_ours].usage.total_tokens, 10);
+        assert_eq!(
+            merged[&they_scanned_further].scan_offset, 900,
+            "a deeper scan of the same file must not be thrown away"
+        );
+        assert_eq!(merged[&they_read_a_replaced_log].scan_offset, 200);
     }
 }

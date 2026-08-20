@@ -627,3 +627,14 @@ export interface ProjectGroup {
   /** False once the project folder itself has been moved or deleted. */
   exists: boolean;
 }
+
+/**
+ * The process now serving a window opened by `openNewWindow`.
+ *
+ * Each window is its own OS process — Tauri's capabilities are bound to the
+ * `main` window label, so a second in-process window would have no IPC.
+ */
+export interface NewWindowInstance {
+  /** Process id of the launched window, for logs and support reports. */
+  pid: number;
+}
