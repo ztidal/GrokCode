@@ -6,7 +6,7 @@ import type {
   SessionMode,
   TimelineItem,
 } from "../types";
-import { SESSION_MODE_OPTIONS } from "../types";
+import { PERMISSION_MODE_OPTIONS, SESSION_MODE_OPTIONS } from "../types";
 import { usePromptHistoryBrowse } from "../hooks/usePromptHistoryBrowse";
 import { filterSlashCommands } from "../utils/slashCommands";
 import {
@@ -96,6 +96,23 @@ export function PromptBar({
   const modeMeta =
     SESSION_MODE_OPTIONS.find((o) => o.value === sessionMode) ??
     SESSION_MODE_OPTIONS[0]!;
+
+  /**
+   * Session modes cover only normal / plan / auto / alwaysApprove, so
+   * `sessionModeFromPermission` folds `acceptEdits` and `dontAsk` into
+   * "normal" — a chip reading "Ask before tools" while the agent is in fact
+   * auto-approving every file write. When the running task is in a mode the
+   * chip cannot name, show the permission mode itself instead.
+   */
+  const unnamedPermission =
+    managed?.permissionMode === "acceptEdits" ||
+    managed?.permissionMode === "dontAsk"
+      ? PERMISSION_MODE_OPTIONS.find((o) => o.value === managed.permissionMode)
+      : undefined;
+  const modeLabel = unnamedPermission?.label ?? modeMeta.label;
+  const modeTooltip = unnamedPermission
+    ? `${unnamedPermission.hint} · set outside the mode cycle`
+    : `${modeMeta.hint} · Press Shift+Tab to cycle modes`;
 
   const focusEnd = useCallback((value: string) => {
     requestAnimationFrame(() => {
@@ -368,8 +385,8 @@ export function PromptBar({
             <PromptChipSelect
               label="Mode"
               value={sessionMode}
-              displayLabel={modeMeta.label}
-              tooltip={`${modeMeta.hint} · Press Shift+Tab to cycle modes`}
+              displayLabel={modeLabel}
+              tooltip={modeTooltip}
               accent={modeMeta.accent}
               glyph={modeGlyph(sessionMode)}
               options={SESSION_MODE_OPTIONS}
