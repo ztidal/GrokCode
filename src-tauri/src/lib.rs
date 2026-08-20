@@ -14,6 +14,7 @@ mod permission_policy;
 mod plan_approval;
 mod plan_file_policy;
 mod project_fs;
+mod project_groups;
 mod proxy;
 mod rpc_handler;
 mod session_noise;
@@ -705,6 +706,8 @@ pub fn run() {
             git_unstage_all,
             git_commit,
             git_apply_patch,
+            project_groups::list_project_groups,
+            project_groups::list_project_group_sessions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
