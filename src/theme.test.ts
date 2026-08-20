@@ -27,7 +27,7 @@ describe("parseStoredChoice", () => {
     }
   });
 
-  it("falls back to following the OS rather than guessing", () => {
+  it("falls back to the default rather than guessing", () => {
     expect(parseStoredChoice(null)).toBe(DEFAULT_CHOICE);
     expect(parseStoredChoice("")).toBe(DEFAULT_CHOICE);
     expect(parseStoredChoice("Dark")).toBe(DEFAULT_CHOICE);
@@ -41,9 +41,10 @@ describe("resolveTheme", () => {
     expect(resolveTheme("dark", false)).toBe("dark");
   });
 
-  it("paints dark when nothing has been chosen", () => {
-    expect(DEFAULT_CHOICE).toBe("dark");
-    expect(resolveTheme(parseStoredChoice(null), false)).toBe("dark");
+  it("paints pure dark when nothing has been chosen, whatever the OS says", () => {
+    expect(DEFAULT_CHOICE).toBe("puredark");
+    expect(resolveTheme(parseStoredChoice(null), false)).toBe("puredark");
+    expect(resolveTheme(parseStoredChoice(null), true)).toBe("puredark");
   });
 
   it("follows the OS only for 'system'", () => {

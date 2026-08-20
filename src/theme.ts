@@ -19,12 +19,19 @@ const THEME_KEY = "ztidalcode.theme";
 export const THEME_CHOICES = ["light", "dark", "puredark", "system"] as const;
 
 /**
- * What an unconfigured install paints. Dark rather than 'system': the app is a
- * long-running console that sits beside a terminal, and following an OS that is
- * usually light put it at odds with everything around it. Choosing 'system' is
- * one click, and is then persisted like any other choice.
+ * What an unconfigured install paints. Not 'system': the app is a long-running
+ * console that sits beside a terminal, and following an OS that is usually
+ * light put it at odds with everything around it. Any other choice is one
+ * click, and is then persisted like any other choice.
+ *
+ * The default is the one theme the boot splash cannot pre-empt, since no
+ * `prefers-color-scheme` value matches it — a fresh install under a light OS
+ * therefore shows one Dawn frame before this lands. The CSP (`script-src
+ * 'self'`) forbids the inline <script> that would otherwise read the stored
+ * choice before first paint, so that frame is the price of the default and not
+ * a bug to chase.
  */
-export const DEFAULT_CHOICE: ThemeChoice = "dark";
+export const DEFAULT_CHOICE: ThemeChoice = "puredark";
 export type ThemeChoice = (typeof THEME_CHOICES)[number];
 /** What the page actually paints — 'system' has already been decided. */
 export type ResolvedTheme = Exclude<ThemeChoice, "system">;
