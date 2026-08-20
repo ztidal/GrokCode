@@ -7,17 +7,18 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
+import {
+  DETAIL_MIN_PX,
+  LEFT_RAIL_DEFAULT_PX,
+  WORKSPACE_MIN_PX,
+} from "./useRailWidth";
+
+export { WORKSPACE_MIN_PX };
 
 /** Fork-owned keys — upstream stores nothing under this prefix (ADR-0003). */
 const WIDTH_KEY = "ztidalcode.workspace.width";
 const COLLAPSED_KEY = "ztidalcode.workspace.collapsed";
 
-/** The fixed left rail track from workspace.css. */
-const LEFT_RAIL_PX = 180;
-/** Narrowest the middle column may get before the composer stops working. */
-const MIN_DETAIL_PX = 420;
-/** Below this the Files/Git tab bar wraps and the tree becomes unreadable. */
-export const WORKSPACE_MIN_PX = 260;
 
 export interface WorkspaceWidthApi {
   /** Attach to the workspace `<aside>` — drag origin and keyboard base width. */
@@ -42,10 +43,13 @@ export interface WorkspaceWidthApi {
  * Widest the rail may be for a given viewport.
  * Exported for unit tests.
  */
-export function workspaceMaxWidth(viewportWidth: number): number {
+export function workspaceMaxWidth(
+  viewportWidth: number,
+  leftRailPx: number = LEFT_RAIL_DEFAULT_PX,
+): number {
   return Math.max(
     WORKSPACE_MIN_PX,
-    viewportWidth - LEFT_RAIL_PX - MIN_DETAIL_PX,
+    viewportWidth - leftRailPx - DETAIL_MIN_PX,
   );
 }
 

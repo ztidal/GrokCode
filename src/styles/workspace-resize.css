@@ -70,3 +70,19 @@
     transition: none;
   }
 }
+
+/* Session rail: same handle, opposite edge. The rail is a grid track with no
+ * overflow clip of its own, so the strip sits just inside its right edge. */
+.left-rail {
+  position: relative;
+}
+
+.workspace-resize-handle.is-left-rail {
+  left: auto;
+  right: 0;
+}
+
+.workspace-resize-handle.is-left-rail::after {
+  left: auto;
+  right: 0;
+}

@@ -1,18 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
+  DETAIL_MIN_PX,
+  LEFT_RAIL_DEFAULT_PX,
+  WORKSPACE_MIN_PX,
+} from "./useRailWidth";
+import {
   clampWorkspaceWidth,
   parseStoredCollapsed,
   parseStoredWidth,
   workspaceMaxWidth,
-  WORKSPACE_MIN_PX,
 } from "./useWorkspaceWidth";
 
-/** 1600 − 180 rail − 420 detail = 1000px of headroom. */
 const WIDE = 1600;
+/** Derived, not spelled: a hard-coded number here hid a stale rail width once. */
+const WIDE_HEADROOM = WIDE - LEFT_RAIL_DEFAULT_PX - DETAIL_MIN_PX;
 
 describe("workspaceMaxWidth", () => {
   it("leaves room for the left rail and a usable detail column", () => {
-    expect(workspaceMaxWidth(WIDE)).toBe(1000);
+    expect(workspaceMaxWidth(WIDE)).toBe(WIDE_HEADROOM);
+  });
+
+  it("shrinks as the left rail is widened", () => {
+    expect(workspaceMaxWidth(WIDE, 600)).toBe(WIDE - 600 - DETAIL_MIN_PX);
+    expect(workspaceMaxWidth(WIDE, 600)).toBeLessThan(workspaceMaxWidth(WIDE));
   });
 
   it("never drops below the minimum on a cramped viewport", () => {
@@ -28,7 +38,7 @@ describe("clampWorkspaceWidth", () => {
 
   it("clamps to the minimum and the viewport-derived maximum", () => {
     expect(clampWorkspaceWidth(10, WIDE)).toBe(WORKSPACE_MIN_PX);
-    expect(clampWorkspaceWidth(9000, WIDE)).toBe(1000);
+    expect(clampWorkspaceWidth(9000, WIDE)).toBe(WIDE_HEADROOM);
   });
 
   it("rounds to whole pixels so the CSS variable stays stable", () => {
@@ -57,8 +67,11 @@ describe("parseStoredWidth", () => {
   });
 
   it("clamps a width persisted on a larger monitor", () => {
-    expect(parseStoredWidth("900", WIDE)).toBe(900);
-    expect(parseStoredWidth("900", 900)).toBe(300);
+    // Inside the band on a wide viewport, capped by it once it is not.
+    expect(parseStoredWidth("600", WIDE)).toBe(600);
+    expect(parseStoredWidth("9000", WIDE)).toBe(WIDE_HEADROOM);
+    // Too cramped to honour both bounds — the floor wins.
+    expect(parseStoredWidth("900", 900)).toBe(WORKSPACE_MIN_PX);
     expect(parseStoredWidth("900", 700)).toBe(WORKSPACE_MIN_PX);
   });
 });

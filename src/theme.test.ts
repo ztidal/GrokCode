@@ -4,6 +4,7 @@ import {
   resolveTheme,
   themeAttribute,
   THEME_CHOICES,
+  DEFAULT_CHOICE,
 } from "./theme";
 
 describe("parseStoredChoice", () => {
@@ -14,10 +15,10 @@ describe("parseStoredChoice", () => {
   });
 
   it("falls back to following the OS rather than guessing", () => {
-    expect(parseStoredChoice(null)).toBe("system");
-    expect(parseStoredChoice("")).toBe("system");
-    expect(parseStoredChoice("Dark")).toBe("system");
-    expect(parseStoredChoice("moon")).toBe("system");
+    expect(parseStoredChoice(null)).toBe(DEFAULT_CHOICE);
+    expect(parseStoredChoice("")).toBe(DEFAULT_CHOICE);
+    expect(parseStoredChoice("Dark")).toBe(DEFAULT_CHOICE);
+    expect(parseStoredChoice("moon")).toBe(DEFAULT_CHOICE);
   });
 });
 
@@ -25,6 +26,11 @@ describe("resolveTheme", () => {
   it("keeps an explicit choice whatever the OS says", () => {
     expect(resolveTheme("light", true)).toBe("light");
     expect(resolveTheme("dark", false)).toBe("dark");
+  });
+
+  it("paints dark when nothing has been chosen", () => {
+    expect(DEFAULT_CHOICE).toBe("dark");
+    expect(resolveTheme(parseStoredChoice(null), false)).toBe("dark");
   });
 
   it("follows the OS only for 'system'", () => {

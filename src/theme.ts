@@ -13,6 +13,14 @@
 const THEME_KEY = "ztidalcode.theme";
 
 export const THEME_CHOICES = ["light", "dark", "system"] as const;
+
+/**
+ * What an unconfigured install paints. Dark rather than 'system': the app is a
+ * long-running console that sits beside a terminal, and following an OS that is
+ * usually light put it at odds with everything around it. Choosing 'system' is
+ * one click, and is then persisted like any other choice.
+ */
+export const DEFAULT_CHOICE: ThemeChoice = "dark";
 export type ThemeChoice = (typeof THEME_CHOICES)[number];
 /** What the page actually paints — 'system' has already been decided. */
 export type ResolvedTheme = "light" | "dark";
@@ -21,14 +29,14 @@ export type ThemeListener = (theme: ResolvedTheme) => void;
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 
 /**
- * Persisted value → choice. Anything unrecognised falls back to 'system'
+ * Persisted value → choice. Anything unrecognised falls back to [`DEFAULT_CHOICE`]
  * rather than to a guess, so a corrupt value is invisible.
  * Exported for unit tests.
  */
 export function parseStoredChoice(raw: string | null): ThemeChoice {
   return (THEME_CHOICES as readonly string[]).includes(raw ?? "")
     ? (raw as ThemeChoice)
-    : "system";
+    : DEFAULT_CHOICE;
 }
 
 /** Exported for unit tests. */

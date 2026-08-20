@@ -6,9 +6,9 @@
   /* Wide enough for a project header and a session title on one line; middle and
    * right share the remainder evenly until the splitter pins the right rail to a
    * px width. Defined once here so the collapsed track list below follows. */
-  --left-rail-w: 360px;
   grid-template-columns:
-    var(--left-rail-w) minmax(0, 1fr) var(--workspace-w, minmax(0, 1fr));
+    var(--left-rail-w, 360px) minmax(0, 1fr)
+    var(--workspace-w, minmax(0, 1fr));
   gap: 0;
   contain: layout;
   transition: grid-template-columns 160ms ease;
@@ -16,7 +16,7 @@
 
 /* Right workspace rail collapsed → thin expand strip. */
 .main-grid.workspace-collapsed {
-  grid-template-columns: var(--left-rail-w) minmax(0, 1fr) 40px;
+  grid-template-columns: var(--left-rail-w, 360px) minmax(0, 1fr) 40px;
 }
 
 .left-rail,

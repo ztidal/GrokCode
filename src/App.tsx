@@ -37,6 +37,7 @@ import { useSessionIndex } from "./hooks/useSessionIndex";
 import { useSlashCommandCatalog } from "./hooks/useSlashCommandCatalog";
 import { useTimelineHistory } from "./hooks/useTimelineHistory";
 import { useUsageMetrics } from "./hooks/useUsageMetrics";
+import { useLeftRailWidth } from "./hooks/useLeftRailWidth";
 import { useWorkspaceWidth } from "./hooks/useWorkspaceWidth";
 import type {
   MainTab,
@@ -128,6 +129,7 @@ function App() {
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   /** Right workspace rail: dragged width + collapse (Ctrl+H), both persisted. */
   const workspace = useWorkspaceWidth();
+  const leftRail = useLeftRailWidth();
   const workspaceCollapsed = workspace.collapsed;
   const toggleWorkspaceCollapsed = workspace.toggleCollapsed;
 
@@ -1005,11 +1007,29 @@ function App() {
         className={
           "main-grid" +
           (workspaceCollapsed ? " workspace-collapsed" : "") +
-          (workspace.resizing ? " is-resizing" : "")
+          (workspace.resizing || leftRail.resizing ? " is-resizing" : "")
         }
-        style={workspace.gridStyle}
+        // Both rails publish a custom property onto the same grid element.
+        style={{ ...leftRail.style, ...workspace.gridStyle }}
       >
-        <aside className="left-rail">
+        <aside
+          className="left-rail"
+          ref={leftRail.railRef as React.RefObject<HTMLElement>}
+        >
+          <WorkspaceSplitter
+            edge="trailing"
+            className="is-left-rail"
+            label="Resize session list"
+            widthPx={leftRail.widthPx}
+            minWidthPx={leftRail.minWidthPx}
+            maxWidthPx={leftRail.maxWidthPx}
+            resizing={leftRail.resizing}
+            onPointerDown={leftRail.onResizePointerDown}
+            onPointerMove={leftRail.onResizePointerMove}
+            onPointerUp={leftRail.onResizePointerUp}
+            onNudge={leftRail.nudgeWidth}
+            onReset={leftRail.resetWidth}
+          />
           <MacosTitlebarBrand
             onCheckUpdate={checkForUpdate}
             checkStatus={updateCheckStatus}
