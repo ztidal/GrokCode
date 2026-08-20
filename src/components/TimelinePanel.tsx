@@ -51,6 +51,16 @@ const TIMELINE_FILTER_ORDER: TimelineFilterKind[] = [
   "unknown",
 ];
 
+/**
+ * The single definition of "near the bottom". Stick-to-bottom and the
+ * jump-to-latest button read it from here so they can never disagree — a
+ * second threshold would let the button appear over a timeline that is still
+ * auto-scrolling under it. Exported for tests.
+ */
+export function isNearTimelineBottom(m: VirtualScrollMetrics): boolean {
+  return m.scrollHeight - m.scrollTop - m.clientHeight < 64;
+}
+
 export function TimelinePanel({
   items,
   managed,
@@ -75,6 +85,8 @@ export function TimelinePanel({
   const [scrollParent, setScrollParent] = useState<HTMLElement | null>(null);
   const filterBarRef = useRef<HTMLDivElement>(null);
   const [filter, setFilter] = useState<TimelineFilterKind>("all");
+  // Rendered mirror of stickToBottom — the ref drives scrolling, this drives paint.
+  const [atBottom, setAtBottom] = useState(true);
   const prevKeysRef = useRef<string[]>([]);
 
   const kindCounts = useMemo(() => {
@@ -147,10 +159,12 @@ export function TimelinePanel({
     [filtered],
   );
 
-  // Single scroll listener lives in useVirtualWindow; panel only updates stick/fade.
+  // Single scroll listener lives in useVirtualWindow; panel only updates
+  // stick / fade / jump-button visibility.
   const onScrollMetrics = useCallback((m: VirtualScrollMetrics) => {
-    const dist = m.scrollHeight - m.scrollTop - m.clientHeight;
-    stickToBottom.current = dist < 64;
+    const nearBottom = isNearTimelineBottom(m);
+    stickToBottom.current = nearBottom;
+    setAtBottom(nearBottom);
     const root = rootRef.current;
     if (root) {
       root.style.setProperty(
@@ -184,6 +198,16 @@ export function TimelinePanel({
       return;
     }
     if (parent) parent.scrollTop = parent.scrollHeight;
+  };
+
+  const jumpToLatest = () => {
+    // Re-arm stick before scrolling, as the pinBottomSeq path does, so content
+    // arriving mid-animation does not fight the jump.
+    stickToBottom.current = true;
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    scrollToEnd(reduced ? "auto" : "smooth");
   };
 
   // Discover scroll parent once the list mounts (ownership stays here; virtual window consumes it).
@@ -345,6 +369,36 @@ export function TimelinePanel({
             })}
           </div>
           <div ref={endRef} className="timeline-panel-end" aria-hidden />
+        </div>
+      )}
+
+      {filtered.length > 0 && (
+        // Always mounted so showing the button never reflows the stream; the
+        // anchor is a zero-height sticky line the button hangs above.
+        <div className="timeline-jump-anchor">
+          {!atBottom && (
+            <button
+              type="button"
+              className="btn timeline-jump-latest"
+              aria-label="Jump to latest activity"
+              onClick={jumpToLatest}
+            >
+              <svg
+                width={13}
+                height={13}
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M8 3v8.5M4.5 8 8 11.5 11.5 8" />
+              </svg>
+              Latest
+            </button>
+          )}
         </div>
       )}
     </div>

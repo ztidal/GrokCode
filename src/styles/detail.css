@@ -553,6 +553,55 @@
 }
 
 /*
+ * Jump to latest. Sticky rather than fixed so it rides the tab body's scrollport
+ * and can never reach the composer, which is a sibling below it. The anchor is
+ * a zero-height line: the button is aligned to its bottom edge and so overflows
+ * upward, contributing no scroll height of its own (an overflow downward would
+ * grow scrollHeight and move the very bottom it is trying to reach).
+ */
+.timeline-jump-anchor {
+  position: sticky;
+  bottom: 16px;
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  height: 0;
+  padding-right: 16px;
+}
+
+.btn.timeline-jump-latest {
+  gap: 5px;
+  padding: 0 11px;
+  min-height: 26px;
+  border-color: var(--border);
+  background: var(--bg-menu);
+  box-shadow: var(--shadow-md);
+  color: var(--text-muted);
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+/* Opaque hover: the shared --bg-hover wash is translucent, and stream text
+   scrolling through the button reads as a rendering fault. */
+.btn.timeline-jump-latest:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, var(--bg-menu));
+  color: var(--text);
+}
+
+.btn.timeline-jump-latest:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--title-selected) 45%, transparent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn.timeline-jump-latest {
+    transition: none;
+  }
+}
+
+/*
  * Kind-group edges: matching top/bottom padding so a single short User/Agent
  * line is vertically balanced (no extra margin-top that only fattened the top).
  */
