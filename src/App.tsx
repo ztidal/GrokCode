@@ -30,6 +30,7 @@ import { WorkspaceSplitter } from "./components/WorkspaceSplitter";
 import { useAgentEvents } from "./hooks/useAgentEvents";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { usePromptQueueController } from "./hooks/usePromptQueueController";
+import { useSessionDefaults } from "./hooks/useSessionDefaults";
 import { useSessionModel } from "./hooks/useSessionModel";
 import { useSessionPlanMode } from "./hooks/useSessionPlanMode";
 import { useSessionIndex } from "./hooks/useSessionIndex";
@@ -132,6 +133,12 @@ function App() {
 
   const planMode = useSessionPlanMode();
   const sessionModel = useSessionModel();
+  /** Destructured: all stable, so the apply effect below tracks agents only. */
+  const {
+    arm: armSessionDefaults,
+    forget: forgetSessionDefaults,
+    apply: applySessionDefaults,
+  } = useSessionDefaults();
   const {
     managedList,
     managedForSession,
@@ -196,6 +203,19 @@ function App() {
     managedForSession,
     setError,
   );
+
+  /**
+   * Land on the latest activity when a session is opened.
+   *
+   * The seq was previously bumped only after attach/spawn, so merely clicking a
+   * card to read it left the timeline wherever the shared scroll container
+   * happened to be — the top. Keyed on the card id, so a detail refresh for the
+   * session already open does not yank a reader back down.
+   */
+  useEffect(() => {
+    if (!detail?.card.id) return;
+    setPinTimelineBottomSeq((n) => n + 1);
+  }, [detail?.card.id]);
 
   const projectCwd = detail?.card.cwd ?? null;
   useEffect(() => {
@@ -444,6 +464,14 @@ function App() {
     }
   }, [managedList]);
 
+  // Newest model + highest thinking level for tasks spawned this run. The model
+  // catalog is advertised after `session/new`, so the choice cannot ride along
+  // with the spawn — it waits here for the first snapshot that carries one, and
+  // each session is decided exactly once (see useSessionDefaults).
+  useEffect(() => {
+    void applySessionDefaults(managedList);
+  }, [managedList, applySessionDefaults]);
+
   async function handleSpawn(opts: {
     cwd: string;
     prompt: string;
@@ -481,6 +509,9 @@ function App() {
           ...prev,
           [sessionId]: permissionMode,
         }));
+        // Newly created, so it gets this build's model/thinking defaults once
+        // its catalog lands. Attached tasks keep whatever they were left on.
+        armSessionDefaults(sessionId);
         if (next.planArmed) {
           // Spawn already called session/set_mode("plan"); track Active.
           await planMode.applyAfterSpawn(sessionId);
@@ -794,6 +825,9 @@ function App() {
   ) {
     const sessionId = managedForSession?.sessionId ?? selectedId;
     if (!sessionId) return;
+    // The user has spoken; a default still waiting on the catalog would only
+    // arrive later and overrule them.
+    forgetSessionDefaults(sessionId);
     const previous = sessionModel.choiceOf(sessionId);
     sessionModel.select(sessionId, modelId, reasoningEffort);
     const live =
