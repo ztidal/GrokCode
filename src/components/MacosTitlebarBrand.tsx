@@ -33,7 +33,7 @@ export function MacosTitlebarBrand({
     <div
       className="macos-titlebar"
       role="banner"
-      aria-label={version ? `PinkCode v${version}` : "PinkCode"}
+      aria-label={version ? `ZtidalCode v${version}` : "ZtidalCode"}
     >
       {/* Native traffic lights sit here; keep clear + draggable */}
       <div className="macos-titlebar-traffic" data-tauri-drag-region />
@@ -58,7 +58,7 @@ export function MacosTitlebarBrand({
           draggable={false}
         />
         <div className="macos-titlebar-copy">
-          <span className="macos-titlebar-name text-title-gradient">PinkCode</span>
+          <span className="macos-titlebar-name text-title-gradient">ZtidalCode</span>
           {statusLine ? (
             <span className="macos-titlebar-version">{statusLine}</span>
           ) : null}

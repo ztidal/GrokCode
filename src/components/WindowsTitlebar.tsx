@@ -61,7 +61,7 @@ export function WindowsTitlebar({
   };
 
   return (
-    <header className="windows-titlebar" aria-label="PinkCode window controls">
+    <header className="windows-titlebar" aria-label="ZtidalCode window controls">
       <div className="windows-titlebar-drag" data-tauri-drag-region>
         <img
           className="windows-titlebar-logo"
@@ -71,7 +71,7 @@ export function WindowsTitlebar({
           height={16}
           draggable={false}
         />
-        <span className="windows-titlebar-name">PinkCode</span>
+        <span className="windows-titlebar-name">ZtidalCode</span>
       </div>
 
       <div className="windows-settings" ref={settingsRef}>
