@@ -608,3 +608,22 @@ export interface SessionRecapResult {
   ok: boolean;
   disabled?: boolean;
 }
+
+/**
+ * One project folder from the Rust project-group index.
+ * Counts cover the whole session tree, not the page the sidebar has loaded.
+ */
+export interface ProjectGroup {
+  /** Normalized folder path — the id `list_project_group_sessions` takes. */
+  key: string;
+  /** Folder basename, widened with parent segments when two groups collide. */
+  label: string;
+  /** The cwd as Grok recorded it — original case and separators. */
+  path: string;
+  /** Sessions the Tasks board would show here. Never zero. */
+  sessionCount: number;
+  /** Newest session mtime in the group, epoch milliseconds. */
+  lastActivityMs: number;
+  /** False once the project folder itself has been moved or deleted. */
+  exists: boolean;
+}

@@ -13,6 +13,8 @@ import {
   stateLabel,
   stateTitle,
 } from "../utils/managedChrome";
+import { NO_SESSIONS, useProjectGroups } from "../hooks/useProjectGroups";
+import { ProjectGroupList } from "./ProjectGroupList";
 
 interface Props {
   sessions: SessionCard[];
@@ -78,6 +80,102 @@ export function SessionList({
     return list;
   }, [sessions, query, managedStatuses, needsInputSessionIds]);
 
+  const searching = query.trim().length > 0;
+  // A search already spans every project, so grouping its hits would only nest
+  // one-card headers. Feeding the hook nothing also keeps it from re-walking the
+  // session tree on each keystroke.
+  const { groups, indexed, isCollapsed, toggleCollapsed } = useProjectGroups(
+    searching ? NO_SESSIONS : visible,
+  );
+  const grouped = !searching && indexed && groups.length > 0;
+
+  function renderCard(s: SessionCard) {
+    const managedStatus = managedStatuses?.[s.id];
+    const attached = isPinkcodeAttached(managedStatus);
+    const openElsewhere = s.isActive && !attached;
+    const needsInput = needsInputSessionIds?.has(s.id) ?? false;
+    const state = resolveCardState(managedStatus, openElsewhere, needsInput);
+    const pid = managedPids?.[s.id] ?? s.activePid ?? null;
+    const cardClass = [
+      "session-card",
+      selectedId === s.id ? "selected" : "",
+      `state-${state}`,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const ctxPct = contextPct(s.contextTokensUsed, s.contextWindowTokens);
+    const ctxLevel = ctxPct >= 90 ? "high" : ctxPct >= 70 ? "mid" : "ok";
+    const ctxStyle = {
+      "--ctx-pct": `${Math.min(100, Math.max(0, ctxPct))}%`,
+    } as CSSProperties;
+    return (
+      <div
+        key={s.id}
+        className={cardClass}
+        onClick={() => onSelect(s.id)}
+        title={stateTitle(state)}
+        aria-busy={
+          state === "running" || state === "starting" ? true : undefined
+        }
+      >
+        {state !== "idle" && (
+          <div className="card-status">
+            <span className="card-status-text">{stateLabel(state)}</span>
+            {pid != null && (
+              <span className="card-status-pid" title={`pid ${pid}`}>
+                pid {pid}
+              </span>
+            )}
+          </div>
+        )}
+        <div className="card-body">
+          <div className="card-title" title={s.title}>
+            {s.title}
+          </div>
+          <div className="card-meta">
+            <span title={s.cwd}>{projectName(s.cwd)}</span>
+            {s.headBranch && <span className="branch">⎇ {s.headBranch}</span>}
+            <span className="time">
+              {formatRelative(s.lastActiveAt ?? s.updatedAt)}
+            </span>
+          </div>
+          <div className="card-metrics">
+            <span
+              className="card-chip"
+              title={
+                s.tokenUsagePending
+                  ? "Loading completed-turn token usage"
+                  : !s.tokenUsageAvailable
+                  ? "Completed-turn token usage is not available for this session"
+                  : s.tokenUsageIncomplete
+                    ? "Approximate completed-turn total tokens; one or more turns may be incomplete"
+                    : "Completed-turn total tokens (input + output, including cached reads)"
+              }
+            >
+              {s.tokenUsagePending
+                ? "… tok"
+                : !s.tokenUsageAvailable
+                ? "? tok"
+                : `${s.tokenUsageIncomplete ? "≈" : ""}${formatTokens(s.totalTokens)} tok`}
+            </span>
+            <span
+              className={`card-chip card-chip-ctx level-${ctxLevel}`}
+              style={ctxStyle}
+              title={`Context ${ctxPct}% (${formatTokens(s.contextTokensUsed, { decimals: false })} / ${formatTokens(s.contextWindowTokens, { decimals: false })})`}
+            >
+              {ctxPct}% ctx
+            </span>
+            {(s.agentLinesAdded > 0 || s.agentLinesRemoved > 0) && (
+              <span className="card-chip diff-stat">
+                +{s.agentLinesAdded}/−{s.agentLinesRemoved}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="session-list">
       <div className="panel-header">
@@ -110,104 +208,17 @@ export function SessionList({
         {visible.length === 0 && (
           <div className="empty-hint">No sessions match.</div>
         )}
-        {visible.map((s) => {
-          const managedStatus = managedStatuses?.[s.id];
-          const attached = isPinkcodeAttached(managedStatus);
-          const openElsewhere = s.isActive && !attached;
-          const needsInput = needsInputSessionIds?.has(s.id) ?? false;
-          const state = resolveCardState(
-            managedStatus,
-            openElsewhere,
-            needsInput,
-          );
-          const pid = managedPids?.[s.id] ?? s.activePid ?? null;
-          const cardClass = [
-            "session-card",
-            selectedId === s.id ? "selected" : "",
-            `state-${state}`,
-          ]
-            .filter(Boolean)
-            .join(" ");
-          const ctxPct = contextPct(
-            s.contextTokensUsed,
-            s.contextWindowTokens,
-          );
-          const ctxLevel =
-            ctxPct >= 90 ? "high" : ctxPct >= 70 ? "mid" : "ok";
-          const ctxStyle = {
-            "--ctx-pct": `${Math.min(100, Math.max(0, ctxPct))}%`,
-          } as CSSProperties;
-          return (
-            <div
-              key={s.id}
-              className={cardClass}
-              onClick={() => onSelect(s.id)}
-              title={stateTitle(state)}
-              aria-busy={
-                state === "running" || state === "starting"
-                  ? true
-                  : undefined
-              }
-            >
-              {state !== "idle" && (
-                <div className="card-status">
-                  <span className="card-status-text">{stateLabel(state)}</span>
-                  {pid != null && (
-                    <span className="card-status-pid" title={`pid ${pid}`}>
-                      pid {pid}
-                    </span>
-                  )}
-                </div>
-              )}
-              <div className="card-body">
-                <div className="card-title" title={s.title}>
-                  {s.title}
-                </div>
-                <div className="card-meta">
-                  <span title={s.cwd}>{projectName(s.cwd)}</span>
-                  {s.headBranch && (
-                    <span className="branch">⎇ {s.headBranch}</span>
-                  )}
-                  <span className="time">
-                    {formatRelative(s.lastActiveAt ?? s.updatedAt)}
-                  </span>
-                </div>
-                <div className="card-metrics">
-                  <span
-                    className="card-chip"
-                    title={
-                      s.tokenUsagePending
-                        ? "Loading completed-turn token usage"
-                        : !s.tokenUsageAvailable
-                        ? "Completed-turn token usage is not available for this session"
-                        : s.tokenUsageIncomplete
-                          ? "Approximate completed-turn total tokens; one or more turns may be incomplete"
-                          : "Completed-turn total tokens (input + output, including cached reads)"
-                    }
-                  >
-                    {s.tokenUsagePending
-                      ? "… tok"
-                      : !s.tokenUsageAvailable
-                      ? "? tok"
-                      : `${s.tokenUsageIncomplete ? "≈" : ""}${formatTokens(s.totalTokens)} tok`}
-                  </span>
-                  <span
-                    className={`card-chip card-chip-ctx level-${ctxLevel}`}
-                    style={ctxStyle}
-                    title={`Context ${ctxPct}% (${formatTokens(s.contextTokensUsed, { decimals: false })} / ${formatTokens(s.contextWindowTokens, { decimals: false })})`}
-                  >
-                    {ctxPct}% ctx
-                  </span>
-                  {(s.agentLinesAdded > 0 || s.agentLinesRemoved > 0) && (
-                    <span className="card-chip diff-stat">
-                      +{s.agentLinesAdded}/−{s.agentLinesRemoved}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
+        {grouped ? (
+          <ProjectGroupList
+            groups={groups}
+            isCollapsed={isCollapsed}
+            onToggle={toggleCollapsed}
+            selectedId={selectedId}
+            renderSession={renderCard}
+          />
+        ) : (
+          visible.map((s) => renderCard(s))
+        )}
         {hasMore && onLoadMore && (
           <button
             className="btn ghost session-load-more"

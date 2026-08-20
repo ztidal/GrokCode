@@ -18,6 +18,7 @@ import type {
   ManagedAgentInfo,
   PendingPermission,
   PermissionMode,
+  ProjectGroup,
   PromptQueueEntry,
   SessionCard,
   SessionDetail,
@@ -476,4 +477,29 @@ export async function gitApplyPatch(
   reverse = false,
 ): Promise<void> {
   return invoke("git_apply_patch", { cwd, patch, reverse });
+}
+
+/**
+ * Project folders rolled up from the session tree, most recently active first.
+ * The counts are the whole index — a sidebar that has paged in 30 cards still
+ * shows how many each project really has.
+ */
+export async function listProjectGroups(): Promise<ProjectGroup[]> {
+  return invoke<ProjectGroup[]>("list_project_groups");
+}
+
+/**
+ * One project's cards, newest first. `key` is re-normalized host-side, so a raw
+ * `card.cwd` works as well as a `ProjectGroup.key`.
+ */
+export async function listProjectGroupSessions(
+  key: string,
+  offset?: number,
+  limit?: number,
+): Promise<SessionCard[]> {
+  return invoke<SessionCard[]>("list_project_group_sessions", {
+    key,
+    offset: offset ?? null,
+    limit: limit ?? null,
+  });
 }

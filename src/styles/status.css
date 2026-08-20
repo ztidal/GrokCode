@@ -662,3 +662,103 @@
   background: var(--danger-dim);
   color: var(--text);
 }
+
+/* ── Project groups over the task list ── */
+.project-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+/*
+ * Sticky: the task list is one scroller and a project can be taller than it, so
+ * without this the header a card belongs to scrolls away from the card.
+ * Near-opaque rather than the usual glass — cards pass underneath it.
+ */
+.project-group-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 8px 4px 6px;
+  border: none;
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--rp-base) 88%, transparent);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  min-width: 0;
+  user-select: none;
+}
+
+.project-group-header:hover {
+  background: color-mix(in srgb, var(--rp-base) 88%, var(--bg-hover));
+  color: var(--text);
+}
+
+.project-group-header:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.project-group-caret {
+  flex-shrink: 0;
+  width: 9px;
+  font-size: 9px;
+  line-height: 1;
+  text-align: center;
+  opacity: 0.75;
+}
+
+.project-group-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+/* Count from the whole index, not the loaded page. */
+.project-group-count {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.project-group-missing {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--warn);
+}
+
+/* The folder is gone; its sessions are still readable history. */
+.project-group-header.missing .project-group-label {
+  opacity: 0.7;
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--warn) 60%, transparent);
+}
+
+/* Collapsed over the open task — say where it went rather than just hide it. */
+.project-group-header.has-selected .project-group-label {
+  color: var(--title-selected);
+}
+
+.project-group-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
