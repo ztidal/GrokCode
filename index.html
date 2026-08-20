@@ -11,6 +11,13 @@
       Cold-start paint before CSS loads. Keep in sync with tokens.css Dawn:
       glass base rgba(250,244,237,.48), subtle #797593,
       highlightHigh #cecacd, rose #d7827e
+      …and theme-dark.css Moon: base #232136, subtle #908caa,
+      highlightHigh #56526e, rose #ea9a97. Dark's splash is opaque because the
+      native material behind it is tinted cream on Windows and cannot follow.
+
+      The dark half is spelled twice for the same reason theme-dark.css spells
+      it twice: the media query is the only half that can be right on the very
+      first frame, since main.tsx cannot stamp data-theme until it runs.
     -->
     <style>
       html,
@@ -56,6 +63,30 @@
       @keyframes boot-spin {
         to {
           transform: rotate(360deg);
+        }
+      }
+
+      :root[data-theme="dark"] body {
+        color: #908caa;
+      }
+      :root[data-theme="dark"] #boot-splash {
+        background: #232136;
+      }
+      :root[data-theme="dark"] #boot-splash .mark {
+        border-color: #56526e;
+        border-top-color: #ea9a97;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) body {
+          color: #908caa;
+        }
+        :root:not([data-theme="light"]) #boot-splash {
+          background: #232136;
+        }
+        :root:not([data-theme="light"]) #boot-splash .mark {
+          border-color: #56526e;
+          border-top-color: #ea9a97;
         }
       }
     </style>

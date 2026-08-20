@@ -1,0 +1,178 @@
+/*
+ * Rosé Pine Moon — the dark half of tokens.css.
+ * https://rosepinetheme.com/palette/
+ *
+ * Only the raw --rp-* tier is re-pointed; the semantic and component tiers in
+ * tokens.css derive from it and follow for free. Everything after the palette is
+ * a token that cannot survive a plain swap — each says why.
+ *
+ * Two activation blocks carry identical declarations:
+ *   :root[data-theme="dark"]                      an explicit choice (theme.ts)
+ *   @media (prefers-color-scheme: dark)
+ *     :root:not([data-theme="light"])             'system', with no JS at all
+ * Equal specificity, so precedence comes from the selectors rather than order:
+ * an explicit 'light' excludes itself from the second and never matches the
+ * first, and 'system' writes no attribute so the media query alone decides —
+ * which is what keeps the very first paint correct. Keep the two in sync.
+ */
+
+:root[data-theme="dark"] {
+  --color-scheme: dark;
+
+  /* ── Official Rosé Pine Moon palette ───────────────────────── */
+  --rp-base: #232136;
+  --rp-surface: #2a273f;
+  --rp-overlay: #393552;
+  --rp-muted: #6e6a86;
+  --rp-subtle: #908caa;
+  --rp-text: #e0def4;
+  --rp-love: #eb6f92;
+  --rp-gold: #f6c177;
+  --rp-rose: #ea9a97;
+  --rp-pine: #3e8fb0;
+  --rp-foam: #9ccfd8;
+  --rp-iris: #c4a7e7;
+  --rp-hl-low: #2a283e;
+  --rp-hl-med: #44415a;
+  --rp-hl-high: #56526e;
+
+  /* ── Role RGB (for alpha) ─────────────────────────────────── */
+  --rp-base-rgb: 35 33 54;
+  --rp-surface-rgb: 42 39 63;
+  --rp-overlay-rgb: 57 53 82;
+  --rp-hl-low-rgb: 42 40 62;
+  --rp-hl-med-rgb: 68 65 90;
+  --rp-hl-high-rgb: 86 82 110;
+  --rp-muted-rgb: 110 106 134;
+  --rp-subtle-rgb: 144 140 170;
+  --rp-text-rgb: 224 222 244;
+  --rp-love-rgb: 235 111 146;
+  --rp-gold-rgb: 246 193 119;
+  --rp-rose-rgb: 234 154 151;
+  --rp-pine-rgb: 62 143 176;
+  --rp-foam-rgb: 156 207 216;
+  --rp-iris-rgb: 196 167 231;
+
+  /* Column shells darken with the theme; the specular below must not. Surface
+     rather than the more obvious Overlay: --bg-hover is Overlay, and a hover
+     wash the same tone as the chrome it sits on is no hover at all. Chrome and
+     panes read apart by their border here, exactly as they do on Dawn. */
+  --chrome-rgb: var(--rp-surface-rgb);
+
+  /* A lift, not a colour. White here would glare through the ~30 rules that
+     spell 0.4–0.7 alpha against --spec-rgb, so Moon lifts toward Highlight
+     High instead and every one of them stays a hairline. */
+  --spec: #56526e;
+  --spec-rgb: 86 82 110;
+
+  /* Elevation is text-tinted in Dawn; on Moon that same tint is a halo, not a
+     shadow. Near-black, and heavier — dark needs more to read as depth. */
+  --shadow-sm: 0 2px 8px rgb(0 0 0 / 0.36);
+  --shadow-md: 0 6px 18px rgb(0 0 0 / 0.46);
+  --shadow-lg: 0 16px 48px rgb(0 0 0 / 0.58);
+  --shadow-text-hairline: 0 1px 0 rgb(0 0 0 / 0.24);
+}
+
+/*
+ * The shell is transparent so the native material shows, but Windows Acrylic is
+ * tinted cream by tauri.conf.json — a file the fork does not own (ADR-0001) —
+ * and no runtime choice can move it, so every dark wash would sit on a light
+ * ground. Paint our own instead, and only where that is true: macOS reads
+ * UnderWindowBackground from the system appearance and gets this right by
+ * itself once the window's forced Light theme is gone.
+ */
+:root[data-theme="dark"]:not(.platform-macos-desktop) body {
+  background: var(--rp-base);
+}
+
+/* Scrims mix Text at 32%, which on Moon fogs the app white instead of sinking
+   it. The one place a literal black is the honest answer. */
+:root[data-theme="dark"] .modal-backdrop,
+:root[data-theme="dark"] .drag-dialog-overlay {
+  background: rgb(0 0 0 / 0.55);
+}
+
+/*
+ * Five rules wash a plate onto a solid dialog with Highlight Low, which on Dawn
+ * sits between Base and Surface and reads as a recess. Moon's Highlight Low is
+ * Surface to within a point, so a borderless field would vanish into the modal
+ * it sits on. Name the step the rules actually meant: one below the dialog.
+ */
+:root[data-theme="dark"] .field input,
+:root[data-theme="dark"] .field textarea,
+:root[data-theme="dark"] .field-select,
+:root[data-theme="dark"] .update-notes-body,
+:root[data-theme="dark"] .drag-dialog-body,
+:root[data-theme="dark"] .user-question-other-input,
+:root[data-theme="dark"] .user-question-preview {
+  background: var(--rp-base);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-scheme: dark;
+
+    /* ── Official Rosé Pine Moon palette ───────────────────────── */
+    --rp-base: #232136;
+    --rp-surface: #2a273f;
+    --rp-overlay: #393552;
+    --rp-muted: #6e6a86;
+    --rp-subtle: #908caa;
+    --rp-text: #e0def4;
+    --rp-love: #eb6f92;
+    --rp-gold: #f6c177;
+    --rp-rose: #ea9a97;
+    --rp-pine: #3e8fb0;
+    --rp-foam: #9ccfd8;
+    --rp-iris: #c4a7e7;
+    --rp-hl-low: #2a283e;
+    --rp-hl-med: #44415a;
+    --rp-hl-high: #56526e;
+
+    /* ── Role RGB (for alpha) ─────────────────────────────────── */
+    --rp-base-rgb: 35 33 54;
+    --rp-surface-rgb: 42 39 63;
+    --rp-overlay-rgb: 57 53 82;
+    --rp-hl-low-rgb: 42 40 62;
+    --rp-hl-med-rgb: 68 65 90;
+    --rp-hl-high-rgb: 86 82 110;
+    --rp-muted-rgb: 110 106 134;
+    --rp-subtle-rgb: 144 140 170;
+    --rp-text-rgb: 224 222 244;
+    --rp-love-rgb: 235 111 146;
+    --rp-gold-rgb: 246 193 119;
+    --rp-rose-rgb: 234 154 151;
+    --rp-pine-rgb: 62 143 176;
+    --rp-foam-rgb: 156 207 216;
+    --rp-iris-rgb: 196 167 231;
+
+    --chrome-rgb: var(--rp-surface-rgb);
+
+    --spec: #56526e;
+    --spec-rgb: 86 82 110;
+
+    --shadow-sm: 0 2px 8px rgb(0 0 0 / 0.36);
+    --shadow-md: 0 6px 18px rgb(0 0 0 / 0.46);
+    --shadow-lg: 0 16px 48px rgb(0 0 0 / 0.58);
+    --shadow-text-hairline: 0 1px 0 rgb(0 0 0 / 0.24);
+  }
+
+  :root:not([data-theme="light"]):not(.platform-macos-desktop) body {
+    background: var(--rp-base);
+  }
+
+  :root:not([data-theme="light"]) .modal-backdrop,
+  :root:not([data-theme="light"]) .drag-dialog-overlay {
+    background: rgb(0 0 0 / 0.55);
+  }
+
+  :root:not([data-theme="light"]) .field input,
+  :root:not([data-theme="light"]) .field textarea,
+  :root:not([data-theme="light"]) .field-select,
+  :root:not([data-theme="light"]) .update-notes-body,
+  :root:not([data-theme="light"]) .drag-dialog-body,
+  :root:not([data-theme="light"]) .user-question-other-input,
+  :root:not([data-theme="light"]) .user-question-preview {
+    background: var(--rp-base);
+  }
+}

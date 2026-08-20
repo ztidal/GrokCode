@@ -5,9 +5,17 @@
  * Hex + space-separated RGB channels so alpha can be:
  *   rgb(var(--text-rgb) / 0.12)
  * Feature CSS must not hardcode Dawn hex / raw palette rgba.
+ *
+ * theme-dark.css re-points only the raw --rp-* tier to Rosé Pine Moon; the
+ * semantic and component tiers below derive from it and follow for free. A new
+ * colour therefore belongs in a tier, never in a rule — a literal in feature CSS
+ * is a token that will be light forever.
  */
 :root {
-  color-scheme: light;
+  /* Routed through a custom property so overlays.css's fields inherit the same
+     value and dark flips both from one place. */
+  --color-scheme: light;
+  color-scheme: var(--color-scheme);
 
   /* ── Official Rosé Pine Dawn palette ───────────────────────── */
   --rp-base: #faf4ed;
@@ -53,7 +61,11 @@
    * Selected cards / menus may stay opaque palette roles on purpose.
    */
   --bg: transparent;
-  --bg-chrome: rgb(var(--spec-rgb) / 0.68);
+  /* Chrome glass is the same white as --spec in Dawn but gets its own tint,
+     because dark has to darken the column shells while leaving the ~30 rules
+     that spell their own alpha against --spec-rgb as highlights. */
+  --chrome-rgb: 255 255 255;
+  --bg-chrome: rgb(var(--chrome-rgb) / 0.68);
   --bg-elevated: rgb(var(--rp-surface-rgb) / 0.68);
   --bg-menu: var(--rp-surface);
   --bg-panel: rgb(var(--rp-surface-rgb) / 0.64);
@@ -114,6 +126,10 @@
   --kind-subagent-dim: rgb(var(--rp-iris-rgb) / 0.14);
   --kind-task: var(--rp-gold);
   --kind-task-dim: rgb(var(--rp-gold-rgb) / 0.14);
+  /* Plan shares Iris with user/subagent: every other role is spoken for, and
+     the plan dialog is never on screen beside a user or subagent edge. */
+  --kind-plan: var(--rp-iris);
+  --kind-plan-dim: rgb(var(--rp-iris-rgb) / 0.16);
   --kind-event: var(--rp-subtle);
   --kind-event-dim: rgb(var(--rp-subtle-rgb) / 0.14);
   --kind-unknown: var(--rp-muted);
@@ -126,6 +142,7 @@
   --kind-shell-rgb: var(--rp-pine-rgb);
   --kind-subagent-rgb: var(--rp-iris-rgb);
   --kind-task-rgb: var(--rp-gold-rgb);
+  --kind-plan-rgb: var(--rp-iris-rgb);
   --kind-event-rgb: var(--rp-subtle-rgb);
   --kind-unknown-rgb: var(--rp-muted-rgb);
 
@@ -145,7 +162,9 @@
     var(--title-selected) 50%,
     var(--live) 100%
   );
-  /* Specular white (light-mode glass only; not a palette role) */
+  /* Specular lift on glass — white on Dawn, Highlight High on Moon. Not a
+     palette role: rules spell their own alpha against it, so it has to be a
+     colour that stays subtle at 0.7 on whatever the theme's surfaces are. */
   --spec: #ffffff;
   --spec-rgb: 255 255 255;
   --inset-spec: inset 0 1px 0 rgb(var(--spec-rgb) / 0.55);
@@ -194,10 +213,28 @@
   --scrollbar-thumb-hover: rgb(var(--rp-subtle-rgb) / 0.55);
   --scrollbar-thumb-active: rgb(var(--accent-rgb) / 0.55);
 
+  /* ── Git panel aliases ──────────────────────────────────────
+   * workspace.css's git rules were written against a second token vocabulary
+   * that nothing ever defined, so they painted with the initial value. Mapping
+   * the names onto ours fixes both themes at once and leaves rules upstream
+   * owns untouched. Do not add to this list — spell the real token instead.
+   */
+  --color-bg: var(--bg-elevated);
+  --color-bg-subtle: var(--hl-low);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-accent: var(--title-selected);
+  --color-green: var(--add);
+  --color-orange: var(--warn);
+  --font-mono: var(--mono);
+
   /*
    * Boot splash / native window (cannot read CSS vars): keep in sync:
    * index.html background #faf4ed, accent #d7827e, border #cecacd
+   *   — and its Moon half, which theme-dark.css restates.
    * tauri.conf.json uses Acrylic on Windows and UnderWindowBackground on macOS.
-   * Its color [250, 244, 237, 96] applies to Windows only; theme Light.
+   * Its color [250, 244, 237, 96] applies to Windows only and is pinned light,
+   * which is why dark paints its own ground on Windows (theme-dark.css).
    */
 }

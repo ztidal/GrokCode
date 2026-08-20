@@ -20,7 +20,6 @@
         "minWidth": 1100,
         "minHeight": 700,
         "dragDropEnabled": false,
-        "theme": "Light",
         "backgroundColor": [
           0,
           0,

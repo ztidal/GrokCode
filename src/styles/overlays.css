@@ -84,7 +84,7 @@
   font: inherit;
   outline: none;
   resize: vertical;
-  color-scheme: light;
+  color-scheme: var(--color-scheme);
   box-sizing: border-box;
 }
 

@@ -1,7 +1,12 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { initTheme } from "./theme";
 import { isMacosDesktop } from "./utils/platform";
+
+// Before anything renders: a stamp that lands after first paint flashes the OS
+// theme at anyone whose choice disagrees with it.
+initTheme();
 
 const rootEl = document.getElementById("root");
 if (!rootEl) {
