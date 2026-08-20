@@ -16,6 +16,8 @@
   ·
   <a href="#installation">Installation</a>
   ·
+  <a href="#using-it">Using it</a>
+  ·
   <a href="#development">Development</a>
   ·
   <a href="#architecture">Architecture</a>
@@ -114,6 +116,20 @@ installers are published there because the in-app updater fetches them anonymous
 > **Our installers are not Authenticode-signed**, so SmartScreen will warn about an unknown publisher.
 > Check your download against `SHA256SUMS.txt` on the release before installing. In-app updates carry a
 > minisign signature and are verified regardless.
+
+## Using it
+
+The day-to-day guide — project grouping, pins, the composer, permission modes, slash commands and the
+keyboard table — lives with the downloads, where a teammate lands:
+**[ZtidalCode-dist README](https://github.com/ztidal/ZtidalCode-dist#using-it)**.
+
+It is kept there rather than duplicated here so there is one copy to keep true. Two things from it are
+worth repeating for anyone changing this code:
+
+- **A new task approves tool calls without asking.** `PINKCODE_DEFAULT_PERMISSION_MODE=ask`, or
+  `{"defaultPermissionMode":"default"}` in `~/.ztidalcode/config.json`, restores the prompt without a
+  rebuild. See [ADR-0002](docs/adr/0002-no-permission-policy-layer.md).
+- **`Enter` sends and `Ctrl+Enter` inserts a newline**, which is the reverse of most chat apps.
 
 ## Development
 
