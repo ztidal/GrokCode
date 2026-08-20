@@ -81,7 +81,7 @@ The rest of the interface keeps those parallel workflows practical:
 | **Modes & plans** | Shift+Tab-style cycle aligned with Grok Build: **Normal → Plan → Auto → Always-approve**. Plan is orthogonal to permission mode; free-text send becomes `/plan …`. When the agent exits plan mode, review and choose Approve, Request changes, or Quit. |
 | **Model** | Switch the session model mid-task over ACP `session/set_model`. |
 | **Permissions** | Default (ask), Accept edits, Auto (classified by Grok), Always approve, Don't ask. Per-task prefs in `~/.ztidalcode/task_prefs.json`. Handles tool permission, file writes, plan approval, and ask-user questions; the task list surfaces **Needs input** when a reverse-request is open. |
-| **Updates** | Checks our own release feed on startup and can install an update in one click. Updates are minisign-verified against a key compiled into the build. |
+| **Updates** | Checks our own release feed once at startup — click the title-bar mark to check again — and installs an update in one click. Updates are minisign-verified against a key compiled into the build. |
 
 ## Installation
 
@@ -110,7 +110,11 @@ location.
 Download from **[ZtidalCode-dist releases](https://github.com/ztidal/ZtidalCode-dist/releases)** —
 installers are published there because the in-app updater fetches them anonymously.
 
-- Windows x64: NSIS installer (per-user) or MSI
+- **Windows x64 — take `ZtidalCode_<version>_x64-setup.exe`.** It installs per-user, needs no
+  administrator, and in-app updates then install silently and relaunch the app.
+- Windows x64, administrator-driven rollout: the MSI. It installs per-machine, so **every in-app update
+  prompts for administrator** — see
+  [which installer to hand people](branding/README.md#which-installer-to-hand-people).
 - macOS / Linux: build from source
 
 > **Our installers are not Authenticode-signed**, so SmartScreen will warn about an unknown publisher.

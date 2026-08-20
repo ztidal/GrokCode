@@ -53,3 +53,49 @@ on an update. Losing it means no future build can update an installed client; le
 Source lives in the private `ztidal/ZtidalCode`. Installers, `latest.json` and its `.sig` go to the public
 `ztidal/ZtidalCode-dist`, because GitHub release assets on a private repository require authentication and
 the updater fetches them anonymously.
+
+## Publishing a release
+
+Build through the overlay, then generate the feed from the bundles that build produced:
+
+```bash
+npm run updater:json -- --notes "what changed in this release"
+gh release create v0.0.9 --repo ztidal/ZtidalCode-dist \
+  latest.json \
+  src-tauri/target/release/bundle/nsis/*-setup.exe* \
+  src-tauri/target/release/bundle/msi/*.msi*
+```
+
+`make-updater-json.mjs` verifies every signature against the bundle bytes before it writes the feed, and
+refuses to write one it cannot verify. A feed whose signature came from a different build than the artifact
+it points at looks perfectly healthy from the outside and fails on every client at install time; it is the
+one packaging mistake worth spending a check on.
+
+### One platform key per installer kind
+
+The feed carries `windows-x86_64-nsis`, `windows-x86_64-msi` and a generic `windows-x86_64`. This is not
+redundancy. The updater looks up `{os}-{arch}-{installer}` first and only then falls back to `{os}-{arch}`,
+and it does not guess the installer at runtime — the bundler stamps it into each binary
+(`__TAURI_BUNDLE_TYPE_VAR_MSI` / `..._NSS`), so the copy inside the MSI and the copy inside the NSIS
+installer ask for different keys.
+
+A feed carrying only the generic key hands an MSI-installed client the NSIS installer. That installs
+cleanly — the NSIS installer removes the MSI install first — but it moves the app from
+`%LOCALAPPDATA%\Programs\ZtidalCode` to `%LOCALAPPDATA%\ZtidalCode`, which leaves whatever the user pinned
+to their taskbar pointing at nothing. The generic key stays in the feed as the fallback for a client whose
+installer kind cannot be determined; NSIS is the right answer there because it needs no administrator.
+
+### Which installer to hand people
+
+The two are not interchangeable, and the difference only shows up at update time:
+
+| | NSIS `-setup.exe` | MSI |
+|---|---|---|
+| Scope | per-user (`RequestExecutionLevel user`) | per-machine (`ALLUSERS=1`) |
+| Install | no prompt | UAC |
+| **In-app update** | **silent: passive install, no prompt, app relaunches itself** | **UAC every time** |
+
+The MSI package does not set the summary-information bit that marks elevation as unnecessary, and the
+updater runs `msiexec` without `MSIINSTALLPERUSER`, so an MSI client cannot update without an administrator.
+Hand individuals the `.exe`. The MSI is for administrator-driven rollout, where updates are managed
+centrally anyway.
