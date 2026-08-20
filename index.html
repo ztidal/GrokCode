@@ -14,6 +14,10 @@
       …and theme-dark.css Moon: base #232136, subtle #908caa,
       highlightHigh #56526e, rose #ea9a97. Dark's splash is opaque because the
       native material behind it is tinted cream on Windows and cannot follow.
+      …and theme-puredark.css: base #000000, subtle #9d9daa,
+      highlightHigh #38383d, rose #ea9a97. Spelled once, not twice — no
+      prefers-color-scheme value asks for pure black, so it can only ever
+      arrive as a stamped attribute, one frame after main.tsx runs.
 
       The dark half is spelled twice for the same reason theme-dark.css spells
       it twice: the media query is the only half that can be right on the very
@@ -77,14 +81,28 @@
         border-top-color: #ea9a97;
       }
 
+      :root[data-theme="puredark"] body {
+        color: #9d9daa;
+      }
+      :root[data-theme="puredark"] #boot-splash {
+        background: #000000;
+      }
+      :root[data-theme="puredark"] #boot-splash .mark {
+        border-color: #38383d;
+        border-top-color: #ea9a97;
+      }
+
       @media (prefers-color-scheme: dark) {
-        :root:not([data-theme="light"]) body {
+        :root:not([data-theme="light"]):not([data-theme="puredark"]) body {
           color: #908caa;
         }
-        :root:not([data-theme="light"]) #boot-splash {
+        :root:not([data-theme="light"]):not([data-theme="puredark"])
+          #boot-splash {
           background: #232136;
         }
-        :root:not([data-theme="light"]) #boot-splash .mark {
+        :root:not([data-theme="light"]):not([data-theme="puredark"])
+          #boot-splash
+          .mark {
           border-color: #56526e;
           border-top-color: #ea9a97;
         }

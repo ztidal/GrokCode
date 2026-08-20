@@ -253,9 +253,11 @@
   color: var(--text-muted);
 }
 
+/* Two per row, not one row of four. The Settings menu is 208px wide, which
+   leaves ~43px per option across four — narrower than the word "Pure Dark". */
 .theme-toggle {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 2px;
   padding: 2px;
   border: 1px solid var(--border);

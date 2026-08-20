@@ -11,11 +11,12 @@ import {
 const LABELS: Record<ThemeChoice, string> = {
   light: "Light",
   dark: "Dark",
+  puredark: "Pure Dark",
   system: "System",
 };
 
 /**
- * Segmented Light / Dark / System control for the Settings menu.
+ * Segmented Light / Dark / Pure Dark / System control for the Settings menu.
  *
  * Subscribes to `onThemeChange` rather than owning the choice: with `system`
  * selected the effective theme moves without anyone clicking, and the row has to

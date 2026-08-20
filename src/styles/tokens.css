@@ -6,10 +6,11 @@
  *   rgb(var(--text-rgb) / 0.12)
  * Feature CSS must not hardcode Dawn hex / raw palette rgba.
  *
- * theme-dark.css re-points only the raw --rp-* tier to Rosé Pine Moon; the
- * semantic and component tiers below derive from it and follow for free. A new
- * colour therefore belongs in a tier, never in a rule — a literal in feature CSS
- * is a token that will be light forever.
+ * theme-dark.css re-points only the raw --rp-* tier to Rosé Pine Moon, and
+ * theme-puredark.css to a neutral ramp on black; the semantic and component
+ * tiers below derive from it and follow for free. A new colour therefore
+ * belongs in a tier, never in a rule — a literal in feature CSS is a token that
+ * will be light forever, in all three themes.
  */
 :root {
   /* Routed through a custom property so overlays.css's fields inherit the same
@@ -232,7 +233,8 @@
   /*
    * Boot splash / native window (cannot read CSS vars): keep in sync:
    * index.html background #faf4ed, accent #d7827e, border #cecacd
-   *   — and its Moon half, which theme-dark.css restates.
+   *   — its Moon half, which theme-dark.css restates,
+   *   — and its Pure Dark half (#000000 / #ea9a97 / #38383d).
    * tauri.conf.json uses Acrylic on Windows and UnderWindowBackground on macOS.
    * Its color [250, 244, 237, 96] applies to Windows only and is pinned light,
    * which is why dark paints its own ground on Windows (theme-dark.css).

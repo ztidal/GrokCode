@@ -11,3 +11,4 @@
 /* Fork additions — kept last so they override the imports above. */
 @import "./styles/workspace-resize.css";
 @import "./styles/theme-dark.css";
+@import "./styles/theme-puredark.css";

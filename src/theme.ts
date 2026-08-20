@@ -1,18 +1,22 @@
 /**
- * Light / dark / follow-the-OS, persisted.
+ * Light / dark / pure dark / follow-the-OS, persisted.
  *
- * The paint lives entirely in CSS (tokens.css + theme-dark.css); this module
- * only decides which of the two activation selectors is armed. 'system'
- * deliberately writes *no* attribute and lets `prefers-color-scheme` decide, so
- * the page is already the right colour before any of this runs — the app's CSP
- * (`script-src 'self'`) forbids the inline <script> that would otherwise be the
- * usual pre-paint hook.
+ * The paint lives entirely in CSS (tokens.css + theme-dark.css +
+ * theme-puredark.css); this module only decides which activation selector is
+ * armed. 'system' deliberately writes *no* attribute and lets
+ * `prefers-color-scheme` decide, so the page is already the right colour before
+ * any of this runs — the app's CSP (`script-src 'self'`) forbids the inline
+ * <script> that would otherwise be the usual pre-paint hook.
+ *
+ * 'puredark' is the one choice the OS can never make for you: there is no
+ * `prefers-color-scheme` value meaning "pure black", so it exists only as a
+ * stamped attribute and never comes back out of `resolveTheme('system', …)`.
  */
 
 /** Fork-owned key — upstream stores nothing under this prefix (ADR-0003). */
 const THEME_KEY = "ztidalcode.theme";
 
-export const THEME_CHOICES = ["light", "dark", "system"] as const;
+export const THEME_CHOICES = ["light", "dark", "puredark", "system"] as const;
 
 /**
  * What an unconfigured install paints. Dark rather than 'system': the app is a
@@ -23,7 +27,7 @@ export const THEME_CHOICES = ["light", "dark", "system"] as const;
 export const DEFAULT_CHOICE: ThemeChoice = "dark";
 export type ThemeChoice = (typeof THEME_CHOICES)[number];
 /** What the page actually paints — 'system' has already been decided. */
-export type ResolvedTheme = "light" | "dark";
+export type ResolvedTheme = Exclude<ThemeChoice, "system">;
 export type ThemeListener = (theme: ResolvedTheme) => void;
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";

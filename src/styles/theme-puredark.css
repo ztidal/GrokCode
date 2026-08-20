@@ -1,0 +1,127 @@
+/*
+ * Pure Dark — Rosé Pine Moon's accents on a true-black, neutral ground.
+ *
+ * Same contract as theme-dark.css: only the raw --rp-* tier is re-pointed, and
+ * the semantic and component tiers in tokens.css derive from it and follow for
+ * free. Everything after the palette is a token that cannot survive a plain
+ * swap — each says why.
+ *
+ * One activation block, not two. `prefers-color-scheme` has no value that means
+ * "pure black", so this can only ever be an explicit choice; theme-dark.css's
+ * media query excludes it so Moon does not paint over this under a dark OS.
+ *
+ * Two decisions worth reading before changing a number here:
+ *
+ * 1. The accents are Moon's, untouched. Every one of them *gains* contrast on
+ *    black — Pine, the weakest, goes 4.29:1 on Moon's ground to 5.76:1 here —
+ *    so re-tinting them would drift from the palette family and buy nothing.
+ *    What makes this a different theme is the grey ramp, which is neutral
+ *    instead of Moon's iris-tinted one. Anything else is "dark, but darker".
+ *
+ * 2. The three lifted greys are not eyeballed. Each was solved so that its wash
+ *    lands the same perceptual distance above the chrome as Moon's does — hover
+ *    +4.85 vs Moon's +4.94 ΔL*, border +9.31 vs +9.24, border-strong +16.49 vs
+ *    +16.39. Hover, border and border-strong therefore read exactly as they do
+ *    on Moon even though the ground sits 16 ΔL* lower. Re-solve, do not nudge.
+ */
+
+:root[data-theme="puredark"] {
+  --color-scheme: dark;
+
+  /* ── Neutral ramp on a literal black ──────────────────────── */
+  --rp-base: #000000;
+  --rp-surface: #101014;
+  --rp-overlay: #1f1f24;
+  --rp-muted: #74747f;
+  --rp-subtle: #9d9daa;
+  --rp-text: #ebebf2;
+
+  /* ── Rosé Pine Moon accents, unchanged ────────────────────── */
+  --rp-love: #eb6f92;
+  --rp-gold: #f6c177;
+  --rp-rose: #ea9a97;
+  --rp-pine: #3e8fb0;
+  --rp-foam: #9ccfd8;
+  --rp-iris: #c4a7e7;
+
+  /* Highlight Low is a recess, as it is on Dawn: below Surface, not above it.
+     It cannot go below the ground here, so it is the one step there is room
+     for — the fields that need a real recess are re-pointed at Base further
+     down instead. */
+  --rp-hl-low: #07070a;
+  --rp-hl-med: #28282d;
+  --rp-hl-high: #38383d;
+
+  /* ── Role RGB (for alpha) ─────────────────────────────────── */
+  --rp-base-rgb: 0 0 0;
+  --rp-surface-rgb: 16 16 20;
+  --rp-overlay-rgb: 31 31 36;
+  --rp-hl-low-rgb: 7 7 10;
+  --rp-hl-med-rgb: 40 40 45;
+  --rp-hl-high-rgb: 56 56 61;
+  --rp-muted-rgb: 116 116 127;
+  --rp-subtle-rgb: 157 157 170;
+  --rp-text-rgb: 235 235 242;
+  --rp-love-rgb: 235 111 146;
+  --rp-gold-rgb: 246 193 119;
+  --rp-rose-rgb: 234 154 151;
+  --rp-pine-rgb: 62 143 176;
+  --rp-foam-rgb: 156 207 216;
+  --rp-iris-rgb: 196 167 231;
+
+  /* Surface rather than Overlay, for Moon's reason: --bg-hover is Overlay, and
+     a hover wash the same tone as the chrome it sits on is no hover at all. */
+  --chrome-rgb: var(--rp-surface-rgb);
+
+  /* A lift, not a colour — the ~30 rules that spell their own alpha against
+     --spec-rgb have to stay hairlines. White would glare doubly here. */
+  --spec: #38383d;
+  --spec-rgb: 56 56 61;
+
+  /* A black shadow has nothing to darken on a black ground, so depth in this
+     theme comes from the border tier and from --inset-spec's top hairline.
+     These are kept, and deepened past Moon's, for the case that does have a
+     lighter ground beneath: menus and modals floating over the chrome. */
+  --shadow-sm: 0 2px 8px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 6px 18px rgb(0 0 0 / 0.62);
+  --shadow-lg: 0 16px 48px rgb(0 0 0 / 0.75);
+  --shadow-text-hairline: 0 1px 0 rgb(0 0 0 / 0.3);
+}
+
+/*
+ * Painted on every platform, unlike Moon. Moon leaves macOS alone because
+ * UnderWindowBackground reads the system appearance and gets dark right by
+ * itself — but no system appearance is pure black, so here the native material
+ * would quietly undo the whole theme. Windows needs it for the other reason:
+ * Acrylic is tinted cream by tauri.conf.json, a file the fork does not own
+ * (ADR-0001).
+ */
+:root[data-theme="puredark"] body {
+  background: var(--rp-base);
+}
+
+/*
+ * Moon's scrim sinks its ground from #232136 to #0f0e18. Black cannot sink, so
+ * the scrim's whole job here is dimming the colour still showing through it;
+ * it needs to be heavier to buy the same "the app went away".
+ */
+:root[data-theme="puredark"] .modal-backdrop,
+:root[data-theme="puredark"] .drag-dialog-overlay {
+  background: rgb(0 0 0 / 0.62);
+}
+
+/*
+ * Five rules wash a plate onto a solid dialog with Highlight Low, which is a
+ * recess on Dawn. There is no room below Base for one here, so name the step
+ * those rules actually meant and let the field be the ground the dialog floats
+ * above — the border tier is what separates them.
+ */
+:root[data-theme="puredark"] .field input,
+:root[data-theme="puredark"] .field textarea,
+:root[data-theme="puredark"] .field-select,
+:root[data-theme="puredark"] .update-notes-body,
+:root[data-theme="puredark"] .drag-dialog-body,
+:root[data-theme="puredark"] .user-question-other-input,
+:root[data-theme="puredark"] .user-question-preview {
+  background: var(--rp-base);
+}
