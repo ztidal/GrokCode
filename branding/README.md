@@ -16,13 +16,32 @@ all version bumps). Editing it in place would put a guaranteed merge conflict in
 sync, forever, in exchange for four values. This file is one upstream will never touch, so the same four
 values cost nothing to carry.
 
+## Versioning
+
+We carry our own version line (`0.0.1`, `0.0.2`, …), independent of upstream's. Upstream's number says
+nothing about which hardening patches a build contains, and the updater compares our feed against our
+build — so the two lines must not be shared.
+
+Windows Installer constrains what the version may be, and Tauri enforces it at bundle time:
+
+- major ≤ 255 (`2026.8.20` is rejected: "app version major number cannot be greater than 255")
+- build metadata must be numeric-only and ≤ 65535 (`+ztidal.1` is rejected; `+1` is accepted)
+
+A date scheme is therefore possible only as `26.8.20+1`, not `2026.8.20+ztidal.1`.
+
 ## Signing
 
 The updater only accepts artifacts signed by the private key matching `plugins.updater.pubkey` above.
-That key is **not** in this repository. Point the build at it with:
+That key is **not** in this repository.
+
+Tauri 2.11 reads the key from `TAURI_SIGNING_PRIVATE_KEY` as the key's *contents*. It does **not** honour
+`TAURI_SIGNING_PRIVATE_KEY_PATH`, despite `tauri signer generate` printing it as an option — a build with
+only the path set produces unsigned bundles and fails at the end with "a public key has been found, but no
+private key".
 
 ```bash
-export TAURI_SIGNING_PRIVATE_KEY_PATH=/path/to/ztidalcode.key
+export TAURI_SIGNING_PRIVATE_KEY="$(cat /path/to/ztidalcode.key)"
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
 npm run tauri -- build --config branding/ztidalcode.json
 ```
 
