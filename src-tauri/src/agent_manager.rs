@@ -1203,10 +1203,8 @@ impl AgentManager {
         }
         let permission_mode = PermissionMode::from_request(req.permission_mode, req.always_approve);
         let always_approve = permission_mode.spawns_always_approve();
-        // Always-approve applies to the task it was chosen for, and no further.
-        if task_prefs::may_persist_as_seed(permission_mode) {
-            task_prefs::set_last_spawn_mode(permission_mode)?;
-        }
+        // A task's mode is its own. Upstream persisted it here as the seed for
+        // the next task; nothing reads such a seed any more (see task_prefs).
         let handle_id = Uuid::new_v4().to_string();
 
         // Top-level flags (before `agent`) vs agent-subcommand flags (after).

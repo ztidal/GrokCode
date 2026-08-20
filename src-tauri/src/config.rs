@@ -17,8 +17,8 @@
 //! resolve) rather than inventing their own fallback chain.
 //!
 //! The built-in default is [`DEFAULT_PERMISSION_MODE`] — full permissions. It is
-//! the weakest layer in the stack, so env, the global file, the Sticky Seed and
-//! the per-task choice all still move away from it. See ADR-0002.
+//! the weakest layer in the stack, so env, the global file and the per-task
+//! choice all still move away from it. See ADR-0002.
 //!
 //! Startup tracing uses `resolve()` (env + global only). Config files are
 //! read-only from the host today (no settings UI); write path lives in tests
@@ -33,17 +33,15 @@ use std::path::{Path, PathBuf};
 ///
 /// `BypassPermissions` — the team runs the agent on repositories it already
 /// trusts, and an approval prompt on every tool call was answered "yes" often
-/// enough that the prompt stopped carrying information. This is a Seed, not a
-/// ceiling: it is the *first* layer, so env, the global file, the Sticky Seed
-/// and the task's own choice each override it, and moving down to `Default` is
-/// one click in the New Task modal.
+/// enough that the prompt stopped carrying information. It is not a ceiling:
+/// env, the global file and the task's own choice each override it, and moving
+/// down to `Default` is one click in the New Task modal.
 ///
-/// It does not weaken the guards around *how* a mode is reached: config still
-/// takes no working directory (a repository cannot pick its own mode), and
-/// [`crate::task_prefs::may_persist_as_seed`] still refuses to write this mode
-/// into the Sticky Seed — the seed stays empty and this constant keeps
-/// answering, so the value on screen is a decision someone can read here rather
-/// than a residue of one earlier task. See ADR-0002.
+/// It is also the *only* thing a fresh task reads. Upstream let the previous
+/// task's mode seed the next one; that seed is gone, so the mode on screen is
+/// always either this value or a choice made for that task — never a residue of
+/// some earlier one. Config still takes no working directory either, so a
+/// repository cannot pick its own mode. See ADR-0002.
 const DEFAULT_PERMISSION_MODE: PermissionMode = PermissionMode::BypassPermissions;
 
 /// On-disk / env-mergeable config document (all fields optional).
@@ -379,14 +377,16 @@ mod tests {
         );
     }
 
-    /// The default is deliberately a mode `task_prefs` refuses to persist. The
-    /// value therefore keeps coming from this file, where it can be read and
-    /// changed, instead of hardening into a residue of one earlier task.
+    /// A task with no stored choice of its own reads this file and nothing
+    /// else. Guards the removal of upstream's last-spawn seed: if that ever
+    /// comes back, a new task stops starting where this constant says.
     #[test]
-    fn the_default_is_still_not_allowed_to_become_the_sticky_seed() {
-        assert!(!crate::task_prefs::may_persist_as_seed(
-            finalize(defaults_layer()).default_permission_mode
-        ));
+    fn a_fresh_task_starts_at_the_configured_default() {
+        assert_eq!(
+            crate::task_prefs::effective_permission_mode(None),
+            finalize(defaults_layer()).default_permission_mode,
+            "a fresh task must start at the configured default"
+        );
     }
 
     #[test]

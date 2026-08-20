@@ -32,7 +32,7 @@ spawns `grok agent --always-approve stdio`: the agent stops raising permission r
 still arrive are answered `Allow` by the host gate. Edits land and commands run without a prompt.
 
 It is a Seed, not a ceiling. Config is the weakest layer in the stack, so `PINKCODE_DEFAULT_PERMISSION_MODE`,
-`~/.ztidalcode/config.json`, the Sticky Seed and the task's own Mode selector each override it. A machine or
+`~/.ztidalcode/config.json` and the task's own Mode selector each override it. A machine or
 a person who wants the old posture back sets the env var or the global file to `ask`; a single task steps
 down in the New Task modal, which opens with **Always approve** visibly pre-selected rather than applying it
 silently.
@@ -46,11 +46,11 @@ are entirely about *how* a mode is reached rather than *which* modes exist or ho
   layer is removed (`config.rs`), and neither `resolve` nor `effective_permission_mode` takes a working
   directory. Unchanged by the new default, and now cuts both ways: a cloned repository can no more talk a
   task *down* than it could talk one up.
-- `BypassPermissions` still never becomes the Sticky Seed (`task_prefs::may_persist_as_seed`). What that
-  buys has changed, though: it is no longer holding back an escalation, it is keeping the seed empty so the
-  answer keeps coming from `DEFAULT_PERMISSION_MODE` — one line, in one file, that a person can read and
-  change. Lower it there and every machine follows on the next launch; had one earlier `/always-approve`
-  been allowed to write itself into the seed, that same edit would have changed nothing.
+- A task inherits nothing from the task before it. Upstream persisted each spawn's mode as the seed for the
+  next one; with a permissive default that carry-over could only ever hand a *narrower* mode forward,
+  silently, from a task the user had long forgotten — so the mechanism is removed rather than guarded. The
+  answer now always comes from `DEFAULT_PERMISSION_MODE`: one line, in one file, that a person can read and
+  change. Lower it there and every machine follows on the next launch.
 - The host still never fabricates a human answer. `decide_gate` returns `Ask` for `PlanApproval` and
   `UserQuestion` in every mode, `BypassPermissions` included — approving a plan and answering the agent's
   question stay decisions a person makes.
@@ -61,8 +61,9 @@ are entirely about *how* a mode is reached rather than *which* modes exist or ho
 Two things in the old list no longer bite, and pretending otherwise would be dishonest:
 
 - "One `/always-approve` cannot silently become the starting mode for all later work" was the point of the
-  seed guard. The guard is intact and tested, but later work now starts at full permissions regardless. The
-  property that survives is about where the decision is written down, not about how permissive it is.
+  seed guard. Later work now starts at full permissions regardless, so the guard had nothing left to hold
+  back and the seed it guarded is gone. What survives is about *where the decision is written down*, not
+  about how permissive it is — and that is a smaller claim than the original one.
 - The approval prompt is no longer a backstop for a task pointed at the wrong working directory, or for a
   tool call the agent was talked into by content it read. Choosing the folder in the New Task modal, and
   choosing a narrower Mode there, are what is left of that — the prompt used to do the catching and does
@@ -71,5 +72,5 @@ Two things in the old list no longer bite, and pretending otherwise would be dis
   machine, without touching this fork.
 
 If the team ever does want to restrict modes, add the build-time allowlist then — it is a small patch at
-three chokepoints (`effective_permission_mode`, `set_permission_mode`, `set_last_spawn_mode`), not a
+two chokepoints (`effective_permission_mode` and `set_permission_mode`), not a
 subsystem.

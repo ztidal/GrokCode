@@ -37,7 +37,7 @@ owns the agent-facing core; we own only what makes the app safe and distributabl
 | Change | Why |
 |---|---|
 | **A repository cannot set its own permission mode.** Upstream merged `<cwd>/.pinkcode/config.json` as the highest-priority config layer; the layer is removed. | Cloning a repo that shipped one seeded its tasks — including at always-approve — with no prompt. |
-| **Full permissions is the configured default, and always-approve still never writes itself into the sticky seed.** New tasks start with the agent approving tool calls; the mode on screen comes from a constant you can read in `config.rs`, not from a residue of one earlier task. | The team works in repositories it already trusts. Escalation still cannot *spread* on its own — see [ADR-0002](docs/adr/0002-no-permission-policy-layer.md) for what that does and does not buy. |
+| **Full permissions is the default, and a task inherits nothing from the task before it.** Upstream seeded each new task with the previous one's mode; that carry-over is removed, so the mode on screen is always either a constant you can read in `config.rs` or a choice made for that task. | The team works in repositories it already trusts — and a mode chosen once for one job should not quietly follow you into the next. See [ADR-0002](docs/adr/0002-no-permission-policy-layer.md). |
 | **Shell calls are never auto-approved on plan.md path text.** | A command merely *containing* the session plan path was auto-approved in every mode, `Don't ask` included. |
 | **`auth.json` is replaced atomically and stays owner-only.** | The highest-consequence write in the app was the one skipping the project's own atomic-write helper. |
 | **The mode chip names the real mode.** `Accept edits` and `Don't ask` used to display as "Ask before tools". | The indicator was wrong exactly where it mattered most. |
@@ -192,7 +192,7 @@ ZtidalCode communicates with Grok Build over ACP (JSON-RPC over stdio): prompts,
 intercepts reverse RPCs (`session/request_permission`, `fs/write_text_file`, `x.ai/exit_plan_mode`,
 `x.ai/ask_user_question`) and applies the configured policy before allowing or denying agent actions.
 
-Read [`CONTEXT.md`](CONTEXT.md) for the vocabulary this codebase uses — several terms (Seed, Sticky Seed,
+Read [`CONTEXT.md`](CONTEXT.md) for the vocabulary this codebase uses — several terms (Seed,
 Escalation) carry distinctions the hardening depends on.
 
 ## License

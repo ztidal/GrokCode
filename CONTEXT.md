@@ -31,25 +31,21 @@ risk while `AcceptEdits` gates by category, so neither is "higher" than the othe
 _Avoid_: Permission level, trust level, approval setting
 
 **Effective Permission Mode**:
-The Permission Mode a task actually spawns with, after resolving the per-session choice, then the Sticky
-Seed, then the configured default. It is the single value that reaches the agent's command line.
+The Permission Mode a task actually spawns with: its own stored choice, else the configured Seed. Nothing
+sits between the two. It is the single value that reaches the agent's command line.
 _Avoid_: Current mode, active permission
 
 **Seed**:
-A configured Permission Mode that only supplies a starting value when nothing else has chosen one. A Seed
-constrains nothing — a user or a workspace can move away from it freely.
-_Avoid_: Default (ambiguous — `Default` is also the name of one Permission Mode)
-
-**Sticky Seed**:
-The last Permission Mode any task spawned with, persisted and reused as the Seed for every later task.
-Distinct from a Seed the user or an administrator chose: nobody selects a Sticky Seed, it is a residue of
-one earlier decision.
-_Avoid_: Last mode, remembered mode
+A configured Permission Mode that supplies a task's starting value when nothing else has chosen one. A
+Seed constrains nothing — the task can move away from it freely. There is exactly one, and it is written
+down in `config.rs`: a task never inherits the mode of the task before it.
+_Avoid_: Default (ambiguous — `Default` is also the name of one Permission Mode); Sticky Seed (upstream's
+last-spawn carry-over, removed)
 
 **Escalation**:
 Moving a task to a Permission Mode that asks a human less often. Our concern is never that a person can
-escalate — everyone on the team may — but that an Escalation can outlive the task it was made for, or
-happen without a person choosing it.
+escalate — everyone on the team may, and full permissions is the Seed — but that a mode chosen for one
+task could follow the user into the next one without being chosen again.
 _Avoid_: Bypass, YOLO, going permissive
 
 **Plan-File Auto-Allow**:

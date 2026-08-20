@@ -30,9 +30,6 @@ struct TaskPrefsFile {
     /// session_id → Plan Pending (Grok Plan is orthogonal to permission).
     #[serde(default)]
     plan_armed: HashMap<String, bool>,
-    /// Last mode chosen in the New Task modal (seed for the next create).
-    #[serde(default)]
-    last_spawn_mode: Option<PermissionMode>,
 }
 
 /// Cheap identity of the file a cached copy was read from — the same
@@ -193,19 +190,19 @@ pub fn set_permission_mode(session_id: &str, mode: PermissionMode) -> Result<(),
     })
 }
 
-/// Raw last-spawn seed without layered fallback (None if never set).
-pub fn last_spawn_mode_raw() -> Option<PermissionMode> {
-    with_data(|data| data.last_spawn_mode)
-}
-
-/// Canonical permission mode: session prefs → last-spawn seed → layered config.
+/// Canonical permission mode: this session's own choice, else the configured
+/// default.
 ///
 /// - `session_id`: when set, use that session's stored mode if present.
 ///
-/// There is no working-directory parameter: a repository does not get a say in
-/// the mode its own tasks start in (see [`crate::config`]).
+/// Nothing sits between the two. A task carries the mode it was given; every
+/// other task starts from [`crate::config`], which is a value someone wrote
+/// down. Upstream kept a "last spawn" seed here so a new task inherited
+/// whatever the previous one happened to run as — with full permissions as the
+/// configured default that seed could only ever hand a *narrower* mode forward,
+/// silently, from a task the user had long forgotten. It is gone.
 ///
-/// New Task seed: `effective_permission_mode(None)`.
+/// New Task: `effective_permission_mode(None)`.
 /// Attach without request mode: `effective_permission_mode(Some(id))`.
 ///
 /// Takes no working directory: the workspace has no say in the mode its own
@@ -216,21 +213,7 @@ pub fn effective_permission_mode(session_id: Option<&str>) -> PermissionMode {
             return mode;
         }
     }
-    last_spawn_mode_raw().unwrap_or_else(|| crate::config::resolve().default_permission_mode)
-}
-
-/// Whether a spawn's mode may become the Sticky Seed for later tasks.
-///
-/// `BypassPermissions` may not. It is the one mode that skips the host
-/// permission gate entirely, so letting it persist turns a single
-/// `/always-approve` into the starting mode for all subsequent work, with
-/// nothing on screen to say so. Every other mode still reaches the gate.
-pub fn may_persist_as_seed(mode: PermissionMode) -> bool {
-    mode != PermissionMode::BypassPermissions
-}
-
-pub fn set_last_spawn_mode(mode: PermissionMode) -> Result<(), String> {
-    update(|data| data.last_spawn_mode = Some(mode))
+    crate::config::resolve().default_permission_mode
 }
 
 /// Snapshot of all session → mode mappings (for UI hydration).
@@ -274,19 +257,18 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    /// Escalating one task must not choose the starting mode for the next one.
+    /// Only two things decide a task's mode: its own stored choice, and the
+    /// configured default. Guards the removal of upstream's last-spawn seed —
+    /// a task must never inherit what some earlier task happened to run as.
     #[test]
-    fn always_approve_never_becomes_the_sticky_seed() {
-        assert!(!may_persist_as_seed(PermissionMode::BypassPermissions));
-        // Everything else still reaches the host gate, so it may stay sticky.
-        for mode in [
-            PermissionMode::Default,
-            PermissionMode::Auto,
-            PermissionMode::AcceptEdits,
-            PermissionMode::DontAsk,
-        ] {
-            assert!(may_persist_as_seed(mode), "{mode:?} should stay sticky");
-        }
+    fn a_task_inherits_nothing_from_the_task_before_it() {
+        let fields = serde_json::to_value(TaskPrefsFile::default()).expect("serialize");
+        let object = fields.as_object().expect("object");
+        assert!(
+            !object.keys().any(|key| key.contains("astSpawn")),
+            "a last-spawn seed is back in the document: {:?}",
+            object.keys().collect::<Vec<_>>()
+        );
     }
 
     static TEST_SEQ: AtomicU64 = AtomicU64::new(0);
@@ -354,7 +336,7 @@ mod tests {
         fs::write(&path, "{broken").expect("fixture");
 
         let error = update_at(&path, |data| {
-            data.last_spawn_mode = Some(PermissionMode::Auto);
+            data.sessions.insert("scratch".into(), PermissionMode::Auto);
         })
         .expect_err("must refuse");
         assert!(error.contains("refusing to overwrite"), "{error}");
@@ -471,7 +453,6 @@ mod tests {
         update_at(&path, |data| {
             data.sessions
                 .insert("two".into(), PermissionMode::AcceptEdits);
-            data.last_spawn_mode = Some(PermissionMode::Default);
         })
         .expect("sibling appends");
         refresh_locked(&path, &mut cache);
