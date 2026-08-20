@@ -264,3 +264,32 @@ describe("groupsHoldingPins", () => {
     );
   });
 });
+
+describe("pinned projects sort to the top", () => {
+  const card = (id: string, cwd: string, updatedAt: string): SessionCard =>
+    ({ id, cwd, title: id, updatedAt, numMessages: 1 }) as SessionCard;
+
+  it("lifts a stale project above a busier one when it holds a pin", () => {
+    const cards = [
+      card("busy", "D:/proj/active", "2026-08-20T10:00:00Z"),
+      card("old", "D:/proj/dusty", "2026-01-01T00:00:00Z"),
+    ];
+    expect(groupLoadedSessions(cards, [], new Set()).map((g) => g.label)).toEqual([
+      "active",
+      "dusty",
+    ]);
+    expect(
+      groupLoadedSessions(cards, [], new Set(["old"])).map((g) => g.label),
+    ).toEqual(["dusty", "active"]);
+  });
+
+  it("keeps activity order among projects that all hold pins", () => {
+    const cards = [
+      card("a", "D:/proj/one", "2026-08-20T10:00:00Z"),
+      card("b", "D:/proj/two", "2026-08-19T10:00:00Z"),
+    ];
+    expect(
+      groupLoadedSessions(cards, [], new Set(["a", "b"])).map((g) => g.label),
+    ).toEqual(["one", "two"]);
+  });
+});
