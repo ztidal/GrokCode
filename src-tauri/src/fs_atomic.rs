@@ -14,8 +14,22 @@ pub fn write_json_atomic(path: &Path, value: &impl Serialize) -> Result<(), Stri
     write_bytes_atomic(path, raw.as_bytes())
 }
 
+/// Like [`write_bytes_atomic`], but the file that lands is owner-only.
+///
+/// Use for anything holding credentials. On Unix the replacement is `0600`
+/// before it is moved into place, so the secret is never briefly world-readable.
+/// On Windows this is the same as [`write_bytes_atomic`]: the file inherits the
+/// user-profile ACL, and we do not hand-build a DACL.
+pub fn write_bytes_atomic_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    write_bytes_atomic_inner(path, bytes, true)
+}
+
 /// Write `bytes` to `path` via a unique temp file in the same directory.
 pub fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    write_bytes_atomic_inner(path, bytes, false)
+}
+
+fn write_bytes_atomic_inner(path: &Path, bytes: &[u8], private: bool) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|error| format!("create dir: {error}"))?;
     }
@@ -30,10 +44,28 @@ pub fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
         path.extension().and_then(|e| e.to_str()).unwrap_or("dat")
     ));
     fs::write(&tmp, bytes).map_err(|error| format!("write {}: {error}", tmp.display()))?;
+    if private {
+        if let Err(error) = restrict_to_owner(&tmp) {
+            let _ = fs::remove_file(&tmp);
+            return Err(format!("restrict {}: {error}", tmp.display()));
+        }
+    }
     if let Err(error) = replace_file(&tmp, path) {
         let _ = fs::remove_file(&tmp);
         return Err(format!("replace {}: {error}", path.display()));
     }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn restrict_to_owner(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+}
+
+#[cfg(not(unix))]
+fn restrict_to_owner(_path: &Path) -> std::io::Result<()> {
+    // Windows: the file inherits the user-profile ACL. Nothing portable to set.
     Ok(())
 }
 

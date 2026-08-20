@@ -307,13 +307,13 @@ fn persist_tokens(
     let mut out = serde_json::to_vec(&root).map_err(|e| format!("serialize auth.json: {e}"))?;
     out.push(b'\n');
 
-    let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, &out).map_err(|e| format!("Failed to write auth temp: {e}"))?;
-    fs::rename(&tmp, &path).map_err(|e| {
-        let _ = fs::remove_file(&tmp);
-        format!("Failed to replace auth.json: {e}")
-    })?;
-    Ok(())
+    // This is the highest-consequence write in the app — it replaces the file
+    // holding the user's xAI access and refresh tokens. Upstream used a fixed
+    // temp name (two refreshes racing clobber each other) and a plain rename,
+    // which drops the 0600 `grok login` created and skips WRITE_THROUGH on
+    // Windows. Both are what `fs_atomic` exists to get right.
+    crate::fs_atomic::write_bytes_atomic_private(&path, &out)
+        .map_err(|e| format!("Failed to replace auth.json: {e}"))
 }
 
 #[cfg(test)]
