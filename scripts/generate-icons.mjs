@@ -133,10 +133,12 @@ async function renderWindowsFrame(master, size) {
     .toBuffer({ resolveWithObject: true });
 
   const n = info.width * info.height;
-  // Punchier pink for legibility on white; hue stays rose.
-  const brandR = 232;
-  const brandG = 96;
-  const brandB = 140;
+  // Small Windows rungs repaint every mark pixel one flat colour, so this value
+  // decides what the taskbar icon looks like. Upstream hard-coded its pink here,
+  // which silently repainted our blue artwork; sample the source instead, using
+  // the same predicate as the loop below so the average covers exactly the
+  // pixels that get repainted.
+  const { r: brandR, g: brandG, b: brandB } = averageMarkColor(data, n);
 
   // SVG rounded rect with natural AA at supersampled size.
   const plate = await plateMask(big)
@@ -191,6 +193,35 @@ async function renderWindowsFrame(master, size) {
     })
     .png({ compressionLevel: 9, adaptiveFiltering: true })
     .toBuffer();
+}
+
+/**
+ * Mean colour of the pixels the small-rung path repaints, so a brand change in
+ * `icon-source.png` carries through without editing this script. Keep the
+ * predicate identical to the one in the repaint loop.
+ */
+function averageMarkColor(data, pixelCount) {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let hits = 0;
+  for (let i = 0; i < pixelCount; i += 1) {
+    const o = i * 4;
+    const [pr, pg, pb, pa] = [data[o], data[o + 1], data[o + 2], data[o + 3]];
+    const chroma = Math.max(pr, pg, pb) - Math.min(pr, pg, pb);
+    if (pa > 40 && chroma > 22 && Math.min(pr, pg, pb) < 245) {
+      r += pr;
+      g += pg;
+      b += pb;
+      hits += 1;
+    }
+  }
+  if (!hits) throw new Error("No mark pixels to sample a brand colour from");
+  return {
+    r: Math.round(r / hits),
+    g: Math.round(g / hits),
+    b: Math.round(b / hits),
+  };
 }
 
 /** Rounded plate mask (SVG AA at the requested size). */
