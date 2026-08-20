@@ -477,7 +477,8 @@ mod compatibility {
     /// so a later `deny_unknown_fields` cannot silently wipe the document.
     #[test]
     fn a_document_written_by_an_older_build_still_loads() {
-        let raw = r#"{"sessions":{"abc":"auto"},"planArmed":{"abc":true},"lastSpawnMode":"default"}"#;
+        let raw =
+            r#"{"sessions":{"abc":"auto"},"planArmed":{"abc":true},"lastSpawnMode":"default"}"#;
         let parsed: TaskPrefsFile = serde_json::from_str(raw).expect("legacy doc must still load");
         assert_eq!(
             parsed.sessions.get("abc").copied(),

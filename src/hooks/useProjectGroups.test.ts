@@ -9,6 +9,7 @@ import {
   parseStoredCollapsed,
   serializeCollapsed,
   type SessionGroup,
+  groupsHoldingPins,
 } from "./useProjectGroups";
 
 function card(
@@ -229,6 +230,37 @@ describe("collapse persistence", () => {
   it("drops entries that are not usable keys", () => {
     expect(parseStoredCollapsed('["d:\\\\a", 3, null, ""]')).toEqual(
       new Set(["d:\\a"]),
+    );
+  });
+});
+
+describe("groupsHoldingPins", () => {
+  const group = (key: string, ids: string[]): SessionGroup => ({
+    key,
+    label: key,
+    path: key,
+    sessions: ids.map((id) => ({ id }) as SessionGroup["sessions"][number]),
+    totalCount: ids.length,
+    missing: false,
+  });
+
+  it("returns nothing when nothing is pinned", () => {
+    expect(groupsHoldingPins([group("a", ["1"])], new Set())).toEqual([]);
+  });
+
+  it("names only the groups that hold a pin", () => {
+    const groups = [group("a", ["1", "2"]), group("b", ["3"]), group("c", [])];
+    expect(groupsHoldingPins(groups, new Set(["3"]))).toEqual(["b"]);
+  });
+
+  it("names every holder when pins span projects", () => {
+    const groups = [group("a", ["1"]), group("b", ["2"]), group("c", ["3"])];
+    expect(groupsHoldingPins(groups, new Set(["1", "3"]))).toEqual(["a", "c"]);
+  });
+
+  it("ignores pins whose session is not on the loaded page", () => {
+    expect(groupsHoldingPins([group("a", ["1"])], new Set(["missing"]))).toEqual(
+      [],
     );
   });
 });

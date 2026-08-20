@@ -10,6 +10,8 @@ import { projectName } from "../utils/format";
  * is what makes "collapsed" the ground state: first run, a wiped entry and a
  * project the entry has never heard of all read the same way.
  */
+const EMPTY_PINS: ReadonlySet<string> = new Set();
+
 const EXPANDED_KEY = "ztidalcode.sessions.groups.expanded";
 
 /** The pre-inversion entry, which listed collapsed keys. See `loadExpanded`. */
@@ -93,6 +95,22 @@ function indexGroups(groups: ProjectGroup[]): Map<string, ProjectGroup> {
  * to collapsed, so a pin buried under the eighth header would be a pin the user
  * cannot see — sorting the header up is what makes the pin reachable.
  */
+/**
+ * Keys of the groups holding at least one pinned session.
+ *
+ * Pinning is how someone says "I need to find this again"; with groups collapsed
+ * by default, a pin that stays behind a closed header has not answered that.
+ */
+export function groupsHoldingPins(
+  groups: readonly SessionGroup[],
+  pinnedIds: ReadonlySet<string>,
+): string[] {
+  if (pinnedIds.size === 0) return [];
+  return groups
+    .filter((group) => group.sessions.some((s) => pinnedIds.has(s.id)))
+    .map((group) => group.key);
+}
+
 export function groupLoadedSessions(
   sessions: SessionCard[],
   groups: ProjectGroup[],
@@ -324,6 +342,29 @@ export function useProjectGroups(
       previous.has(holder.key) ? previous : new Set(previous).add(holder.key),
     );
   }, [selectedId, groups]);
+
+  /**
+   * Reveal the projects holding a pin, once per pin set. Same one-shot shape as
+   * the selection reveal above: collapsing such a group afterwards sticks, and
+   * it opens again only when the pins themselves change — or on the next launch,
+   * which is the case that matters, since every group starts collapsed.
+   */
+  const revealedPins = useRef<string | null>(null);
+  useEffect(() => {
+    const pins = pinnedIds ?? EMPTY_PINS;
+    const holders = groupsHoldingPins(groups, pins);
+    // Nothing loaded yet: the pinned card may not be on this page. Try again.
+    if (holders.length === 0) return;
+    const signature = [...pins].sort().join(" ");
+    if (revealedPins.current === signature) return;
+    revealedPins.current = signature;
+    setExpanded((previous) => {
+      const next = new Set(previous);
+      const before = next.size;
+      for (const key of holders) next.add(key);
+      return next.size === before ? previous : next;
+    });
+  }, [pinnedIds, groups]);
 
   return { groups, indexed: index.length > 0, isCollapsed, toggleCollapsed };
 }
