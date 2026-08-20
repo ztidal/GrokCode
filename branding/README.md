@@ -48,6 +48,27 @@ npm run tauri -- build --config branding/ztidalcode.json
 Because our installers carry no Authenticode signature, this minisign key is the only integrity guarantee
 on an update. Losing it means no future build can update an installed client; leaking it means anyone can.
 
+### Backing it up
+
+The key file's own passphrase is empty — that is why the build passes
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""` — so nothing protects it at rest except where you keep it. It has
+to exist in a second place, and it has to be encrypted there:
+
+```bash
+scripts/backup-signing-key.sh /path/to/ztidalcode.key
+```
+
+Run it from your own terminal: gpg asks for the passphrase itself, and a passphrase typed into a script
+argument, an environment variable, or an agent's transcript is not a passphrase any more. The script
+refuses to finish unless the ciphertext decrypts back to the original bytes — a backup that does not
+restore is worse than none, because it stops you looking for the key.
+
+Commit only the `.gpg`. Restoring is `gpg --output ztidalcode.key --decrypt ztidalcode.key.gpg`.
+
+Minisign has no command to change a key's passphrase, so giving this key a real one means generating a new
+key — and every client already installed trusts the old public key and would have to be reinstalled by
+hand once. That is the trade to weigh when deciding, not a thing to do casually.
+
 ## Where releases go
 
 Source lives in the private `ztidal/ZtidalCode`. Installers, `latest.json` and its `.sig` go to the public
