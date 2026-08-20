@@ -242,6 +242,7 @@ describe("groupsHoldingPins", () => {
     sessions: ids.map((id) => ({ id }) as SessionGroup["sessions"][number]),
     totalCount: ids.length,
     missing: false,
+    activityMs: 0,
   });
 
   it("returns nothing when nothing is pinned", () => {

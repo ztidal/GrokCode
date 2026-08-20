@@ -355,7 +355,7 @@ export function useProjectGroups(
     const holders = groupsHoldingPins(groups, pins);
     // Nothing loaded yet: the pinned card may not be on this page. Try again.
     if (holders.length === 0) return;
-    const signature = [...pins].sort().join(" ");
+    const signature = JSON.stringify([...pins].sort());
     if (revealedPins.current === signature) return;
     revealedPins.current = signature;
     setExpanded((previous) => {
