@@ -1,16 +1,16 @@
 <!-- Relative path so GitHub does not rewrite via camo (often broken in CN). -->
 <p align="center">
-  <img src="docs/logo.png" alt="PinkCode" width="128" />
+  <img src="docs/logo.png" alt="ZtidalCode" width="128" />
 </p>
 
-<h1 align="center">PinkCode - Grok Desktop GUI</h1>
+<h1 align="center">ZtidalCode — Grok Desktop GUI</h1>
 
 <p align="center">
-  <strong>Effortless Parallel Tasks & Crystal-Clear Usage Visuals.</strong>
+  <strong>Our internal build of PinkCode: same workspace, hardened for team use.</strong>
 </p>
 
 <p align="center">
-  <a href="#screenshot">Screenshot</a>
+  <a href="#what-differs-from-upstream">What differs</a>
   ·
   <a href="#features">Features</a>
   ·
@@ -21,21 +21,50 @@
   <a href="#architecture">Architecture</a>
 </p>
 
-Run multiple [Grok Build](https://x.ai/cli) tasks side by side, follow every task in a readable live timeline, and see where your credits and tokens go. PinkCode turns Grok Build's CLI workflow into a visual desktop workspace while keeping `grok` itself in charge: it connects over [ACP](https://spec.acp.dev) (Agent Client Protocol) via stdio and does not run a separate agent loop.
+Run multiple [Grok Build](https://x.ai/cli) tasks side by side, follow every task in a readable live
+timeline, and see where your credits and tokens go. ZtidalCode turns Grok Build's CLI workflow into a
+visual desktop workspace while keeping `grok` itself in charge: it connects over
+[ACP](https://spec.acp.dev) (Agent Client Protocol) via stdio and does not run a separate agent loop.
+
+This is a fork of [3xian/PinkCode](https://github.com/3xian/PinkCode), kept deliberately thin. Upstream
+owns the agent-facing core; we own only what makes the app safe and distributable inside the team. See
+[ADR-0001](docs/adr/0001-track-upstream-as-a-thin-hardening-layer.md) for why.
 
 **Tauri 2 · React 19 · TypeScript · Rust**
+
+## What differs from upstream
+
+| Change | Why |
+|---|---|
+| **A repository cannot set its own permission mode.** Upstream merged `<cwd>/.pinkcode/config.json` as the highest-priority config layer; the layer is removed. | Cloning a repo that shipped one seeded its tasks — including at always-approve — with no prompt. |
+| **Always-approve is not sticky.** Choosing it applies to that task only; it never becomes the starting mode for later tasks. | One `/always-approve` used to become the default for all subsequent work, with nothing on screen to say so. |
+| **Shell calls are never auto-approved on plan.md path text.** | A command merely *containing* the session plan path was auto-approved in every mode, `Don't ask` included. |
+| **`auth.json` is replaced atomically and stays owner-only.** | The highest-consequence write in the app was the one skipping the project's own atomic-write helper. |
+| **The mode chip names the real mode.** `Accept edits` and `Don't ask` used to display as "Ask before tools". | The indicator was wrong exactly where it mattered most. |
+| **Own identity, own update feed.** Product name, bundle identifier, version line and updater key live in `branding/ztidalcode.json`. | So our build is a separate application, and cannot be replaced by an upstream release. |
+
+Deliberately **not** changed: there is no permission allowlist or managed policy — every mode is open to
+everyone ([ADR-0002](docs/adr/0002-no-permission-policy-layer.md)) — and the identity we present to Grok
+Build on the wire is still upstream's ([ADR-0003](docs/adr/0003-rename-the-package-not-the-protocol.md)).
+Both look like oversights and are not.
+
+Host state lives in `~/.ztidalcode` (`%USERPROFILE%\.ztidalcode` on Windows), separate from upstream's
+`~/.pinkcode`, so both apps can be installed side by side.
 
 ## Screenshot
 
 <p align="center">
-  <img src="docs/product.jpg" alt="PinkCode — parallel tasks, live Timeline, usage, workspace" width="100%" />
+  <img src="docs/product.jpg" alt="Parallel tasks, live Timeline, usage, workspace" width="100%" />
 </p>
+
+<p align="center"><sub>Upstream's screenshot — the interface is unchanged apart from the name and mark.</sub></p>
 
 ## Features
 
-PinkCode is centered on two things that are difficult to manage from a terminal alone: keeping several agent tasks moving at once and understanding their activity and cost at a glance.
+The app is centered on two things that are difficult to manage from a terminal alone: keeping several
+agent tasks moving at once, and understanding their activity and cost at a glance.
 
-| Focus | What PinkCode makes easier |
+| Focus | What it makes easier |
 |------|----------|
 | **Parallel tasks** | Work across multiple Grok Build sessions from one task board. Create, switch, prompt, and stop tasks independently; each task connects to `grok` over ACP when you first send a message. Existing sessions are loaded from `~/.grok` (`%USERPROFILE%\.grok` on Windows). |
 | **Clear task activity** | Read user messages, agent responses, thoughts, tool calls, shell output, plans, and events in one live timeline. Subagent and background-task cards update live; attach/reconnect refills running work via ACP list APIs. Reconnect restores history from `updates.jsonl`. |
@@ -49,14 +78,15 @@ The rest of the interface keeps those parallel workflows practical:
 | **Workspace & Git** | Browse the project tree, preview text and images, and manage Git: branch status (ahead/behind), staged/unstaged lists, inline file diffs, **per-hunk stage/unstage**, and commit. |
 | **Modes & plans** | Shift+Tab-style cycle aligned with Grok Build: **Normal → Plan → Auto → Always-approve**. Plan is orthogonal to permission mode; free-text send becomes `/plan …`. When the agent exits plan mode, review and choose Approve, Request changes, or Quit. |
 | **Model** | Switch the session model mid-task over ACP `session/set_model`. |
-| **Permissions** | Default (ask), Accept edits, Auto (classified by Grok), Bypass permissions, Don't ask. Per-task prefs in `~/.pinkcode/task_prefs.json`. Handles tool permission, file writes, plan approval, and ask-user questions; the task list surfaces **Needs input** when a reverse-request is open. |
-| **Updates** | Check GitHub Releases automatically on startup and optionally install an update in one click. |
+| **Permissions** | Default (ask), Accept edits, Auto (classified by Grok), Always approve, Don't ask. Per-task prefs in `~/.ztidalcode/task_prefs.json`. Handles tool permission, file writes, plan approval, and ask-user questions; the task list surfaces **Needs input** when a reverse-request is open. |
+| **Updates** | Checks our own release feed on startup and can install an update in one click. Updates are minisign-verified against a key compiled into the build. |
 
 ## Installation
 
 ### 1. Install Grok Build
 
-PinkCode requires the [Grok Build CLI](https://x.ai/cli).
+ZtidalCode requires the [Grok Build CLI](https://x.ai/cli) and a SuperGrok, X Premium+, or SuperGrok Heavy
+subscription. The app never handles your credentials — it reuses the session `grok login` creates.
 
 **Windows (PowerShell):**
 
@@ -70,16 +100,20 @@ irm https://x.ai/cli/install.ps1 | iex
 curl -fsSL https://x.ai/cli/install.sh | bash
 ```
 
-By default, Grok stores its data under `~/.grok` on macOS/Linux and
-`%USERPROFILE%\.grok` on Windows. Set `GROK_HOME` to use another location.
+Grok stores its data under `~/.grok` (`%USERPROFILE%\.grok` on Windows). Set `GROK_HOME` for another
+location.
 
-### 2. Install PinkCode
+### 2. Install ZtidalCode
 
-Download a prebuilt installer from **[GitHub Releases](https://github.com/3xian/PinkCode/releases)**:
+Download from **[ZtidalCode-dist releases](https://github.com/ztidal/ZtidalCode-dist/releases)** —
+installers are published there because the in-app updater fetches them anonymously.
 
-- Windows x64: NSIS installer
-- macOS: Apple Silicon and Intel builds
-- Linux: build from source; CI installers are not available yet
+- Windows x64: NSIS installer (per-user) or MSI
+- macOS / Linux: build from source
+
+> **Our installers are not Authenticode-signed**, so SmartScreen will warn about an unknown publisher.
+> Check your download against `SHA256SUMS.txt` on the release before installing. In-app updates carry a
+> minisign signature and are verified regardless.
 
 ## Development
 
@@ -107,9 +141,29 @@ powershell -ExecutionPolicy Bypass -File scripts/windows-setup.ps1
 ```bash
 npm ci
 npm run tauri:dev          # development
-npm run tauri:build        # local installer under src-tauri/target/release/bundle/
 npm run check              # frontend + Rust (fmt/clippy/test) — same as CI
 ```
+
+Release bundles **must** go through the identity overlay, or they ship under upstream's name and updater:
+
+```bash
+export TAURI_SIGNING_PRIVATE_KEY="$(cat /path/to/ztidalcode.key)"
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+npm run tauri -- build --config branding/ztidalcode.json
+```
+
+See [`branding/README.md`](branding/README.md) for the signing key, the version scheme, and the Windows
+Installer limits that constrain it.
+
+### Keeping up with upstream
+
+```bash
+git fetch upstream && git merge upstream/main
+```
+
+Conflicts should be confined to version bumps. If a merge wants to change `config.rs`,
+`plan_file_policy.rs`, `task_prefs.rs` or `auth.rs`, read the ADRs first — those files carry the hardening,
+and upstream has historically not touched them.
 
 **Env (optional)**
 
@@ -133,10 +187,19 @@ UI (React 19 + TypeScript)
         |-- Billing — HTTP calls to Grok billing API (OIDC auth via ~/.grok/auth.json)
 ```
 
-PinkCode communicates with Grok Build over ACP (JSON-RPC over stdio): prompts, `session/set_mode`, `session/set_model`, usage/recap extensions, and lifecycle notifications. The host-side permission gate intercepts reverse RPCs (`session/request_permission`, `fs/write_text_file`, `x.ai/exit_plan_mode`, `x.ai/ask_user_question`) and applies the configured risk policy before allowing or denying agent actions.
+ZtidalCode communicates with Grok Build over ACP (JSON-RPC over stdio): prompts, `session/set_mode`,
+`session/set_model`, usage/recap extensions, and lifecycle notifications. The host-side permission gate
+intercepts reverse RPCs (`session/request_permission`, `fs/write_text_file`, `x.ai/exit_plan_mode`,
+`x.ai/ask_user_question`) and applies the configured policy before allowing or denying agent actions.
+
+Read [`CONTEXT.md`](CONTEXT.md) for the vocabulary this codebase uses — several terms (Seed, Sticky Seed,
+Escalation) carry distinctions the hardening depends on.
 
 ## License
 
-Copyright (c) 2026 3xian.
-
 Licensed under the [Apache License 2.0](LICENSE).
+
+Copyright (c) 2026 3xian — original work, [3xian/PinkCode](https://github.com/3xian/PinkCode).
+Modifications copyright (c) 2026 ztidal. Changes from the original are summarised in
+[What differs from upstream](#what-differs-from-upstream) and recorded per-commit on the `hardening`
+branch.
