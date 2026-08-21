@@ -209,6 +209,17 @@ export function TimelinePanel({
     [filtered],
   );
 
+  /**
+   * The ref drives scrolling and the state drives paint, so they move together.
+   * Writing the ref alone left the jump-to-latest button showing the opposite
+   * of the truth, and unrecoverably: the next metrics report found the ref
+   * already equal to its own conclusion and skipped the mirror.
+   */
+  const setStick = useCallback((next: boolean) => {
+    stickToBottom.current = next;
+    setAtBottom(next);
+  }, []);
+
   /** Last reported geometry, to tell a scroll from the content growing. */
   const lastScrollTop = useRef(0);
   const lastScrollHeight = useRef(0);
@@ -234,8 +245,7 @@ export function TimelinePanel({
     lastScrollTop.current = m.scrollTop;
     lastScrollHeight.current = m.scrollHeight;
 
-    if (intent.pinned !== stickToBottom.current) setAtBottom(intent.pinned);
-    stickToBottom.current = intent.pinned;
+    setStick(intent.pinned);
 
     // The report that says the content got taller is also where following it
     // belongs; a second observer for the same event would only race this one.
@@ -248,7 +258,7 @@ export function TimelinePanel({
         `${m.scrollTop - m.listTop}px`,
       );
     }
-  }, []);
+  }, [setStick]);
 
   const virtual = useVirtualWindow(itemKeys, rootRef, scrollParent, {
     onScrollMetrics,
@@ -279,7 +289,7 @@ export function TimelinePanel({
   const jumpToLatest = () => {
     // Re-arm stick before scrolling, as the pinBottomSeq path does, so content
     // arriving mid-animation does not fight the jump.
-    stickToBottom.current = true;
+    setStick(true);
     const reduced = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
@@ -313,7 +323,7 @@ export function TimelinePanel({
 
   useEffect(() => {
     if (!pinBottomSeq) return;
-    stickToBottom.current = true;
+    setStick(true);
     const t0 = window.requestAnimationFrame(() => scrollToEnd("smooth"));
     const t1 = window.setTimeout(() => scrollToEnd("smooth"), 80);
     const t2 = window.setTimeout(() => scrollToEnd("auto"), 320);
@@ -322,7 +332,7 @@ export function TimelinePanel({
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };
-  }, [pinBottomSeq]);
+  }, [pinBottomSeq, setStick]);
 
   if (items.length === 0 && !hasMore) {
     return (
@@ -347,7 +357,7 @@ export function TimelinePanel({
             className="btn"
             disabled={loadingOlder}
             onClick={() => {
-              stickToBottom.current = false;
+              setStick(false);
               void onLoadOlder();
             }}
           >

@@ -533,7 +533,14 @@
   contain-intrinsic-size: auto 88px;
 }
 
-.timeline.is-virtualized .tl-row {
+/*
+ * Rows are `.tl-item` — see TimelineRow.tsx. This said `.tl-row`, which matches
+ * no element, so the opt-out above never applied: every row kept
+ * `content-visibility: auto` while virtualized, `measureKey` read the 88px
+ * intrinsic placeholder instead of the real height, and the timeline could not
+ * find its own bottom.
+ */
+.timeline.is-virtualized .tl-item {
   content-visibility: visible;
   contain-intrinsic-size: none;
 }
