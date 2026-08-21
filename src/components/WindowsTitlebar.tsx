@@ -90,6 +90,11 @@ export function WindowsTitlebar({
           draggable={false}
         />
         <span className="windows-titlebar-name">ZtidalCode</span>
+        {/* What it is for, beside what it is called. The product name
+            deliberately does not carry xAI's mark; saying which agent it
+            drives is a description, and belongs here rather than in the
+            name. */}
+        <span className="windows-titlebar-tag">for Grok Build</span>
       </div>
 
       <div className="windows-settings" ref={settingsRef}>
