@@ -374,15 +374,6 @@ pub struct QueueEditParams {
     pub client_identifier: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct QueueInterjectParams {
-    pub session_id: String,
-    pub id: String,
-    pub expected_version: u64,
-    pub client_identifier: String,
-}
-
 // ── session/set_model (ACP standard, not x.ai/*) ────────────────────────────
 
 /// ACP `session/set_model` request. Reasoning effort rides in `_meta.reasoningEffort`
@@ -777,9 +768,11 @@ pub struct YoloModeChangedParams {
 // ── JSON-RPC envelopes (internal wire helpers) ──────────────────────────────
 
 #[derive(Debug, Serialize)]
-pub struct JsonRpcNotification<P: Serialize> {
+pub struct JsonRpcNotification<'a, P: Serialize> {
     pub jsonrpc: &'static str,
-    pub method: &'static str,
+    /// Borrowed, not `'static`: a private extension's wire name is computed
+    /// from the bare one at the call site rather than written out twice.
+    pub method: &'a str,
     pub params: P,
 }
 

@@ -143,20 +143,82 @@ impl AcpClient {
         self.gateway.call(method, params_val, timeout)
     }
 
-    /// Ext method that returns Grok's `{ result, error? }` envelope.
-    pub fn call_ext<P: Serialize, R: DeserializeOwned>(
+    /// The wire name of one of grok's private extensions.
+    ///
+    /// grok registers them with a leading underscore — `_x.ai/queue/remove` —
+    /// while its own capability keys, in the same handshake reply, spell them
+    /// bare: `agentCapabilities._meta["x.ai/fs_notify"]`. Nothing reconciles the
+    /// two, so a call site that copies the capability spelling reaches a method
+    /// that does not exist.
+    ///
+    /// Measured against agentVersion 1.0.5: every one of the fifteen extensions
+    /// this client sends answers only to the underscored form. A request sent
+    /// bare comes back `-32601`; a notification sent bare is discarded in
+    /// silence. Both were shipped bare until this existed, so usage, recap,
+    /// rewind, subagent and task control, interject and the entire prompt queue
+    /// had never once reached the agent.
+    fn ext_wire(method: &str) -> String {
+        format!("_{method}")
+    }
+
+    /// A private-extension request, named bare at the call site.
+    ///
+    /// Falls back to the bare spelling on `-32601`. Both spellings appear in one
+    /// handshake today, so neither is safe to assume forever, and this is the
+    /// difference between a future rename costing a release and costing nothing.
+    fn request_ext_raw<P: Serialize>(
         &self,
-        method: &'static str,
+        method: &str,
+        params: &P,
+        timeout: Duration,
+    ) -> Result<Value> {
+        let params_val = serde_json::to_value(params)?;
+        match self
+            .gateway
+            .call(&Self::ext_wire(method), params_val.clone(), timeout)
+        {
+            Err(AcpError::Rpc { code: -32601, .. }) => {
+                self.gateway.call(method, params_val, timeout)
+            }
+            other => other,
+        }
+    }
+
+    /// A private-extension request returning Grok's `{ result, error? }` envelope.
+    fn request_ext<P: Serialize, R: DeserializeOwned>(
+        &self,
+        method: &str,
         params: &P,
         timeout: Duration,
     ) -> Result<R> {
-        let raw = self.call_raw(method, params, timeout)?;
+        let raw = self.request_ext_raw(method, params, timeout)?;
         let envelope: ExtMethodEnvelope<R> = serde_json::from_value(raw)?;
         envelope.into_result().map_err(AcpError::Other)
     }
 
+    /// A private-extension request whose result is the value itself, not an
+    /// envelope.
+    fn request_ext_typed<P: Serialize, R: DeserializeOwned>(
+        &self,
+        method: &str,
+        params: &P,
+        timeout: Duration,
+    ) -> Result<R> {
+        let raw = self.request_ext_raw(method, params, timeout)?;
+        Ok(serde_json::from_value(raw)?)
+    }
+
+    /// A private-extension notification, named bare at the call site.
+    ///
+    /// There is no reply and so no fallback: a notification under a name the
+    /// agent does not know is discarded without a word, which is exactly how
+    /// every queue control came to report success while doing nothing.
+    fn notify_ext<P: Serialize>(&self, method: &str, params: &P) -> Result<()> {
+        self.notify_typed(&Self::ext_wire(method), params)
+    }
+
     /// Typed JSON-RPC notification (no response).
-    pub fn notify_typed<P: Serialize>(&self, method: &'static str, params: &P) -> Result<()> {
+    pub fn notify_typed<P: Serialize>(&self, method: &str, params: &P) -> Result<()> {
         let envelope = JsonRpcNotification {
             jsonrpc: "2.0",
             method,
@@ -269,7 +331,7 @@ impl AcpClient {
 
     /// Queue a user interjection into the currently running Grok turn.
     pub fn session_interject(&self, session_id: &str, text: &str) -> Result<Value> {
-        self.call_raw(
+        self.request_ext_raw(
             "x.ai/interject",
             &InterjectParams {
                 session_id: session_id.to_string(),
@@ -281,7 +343,7 @@ impl AcpClient {
     }
 
     pub fn queue_remove(&self, session_id: &str, id: &str, expected_version: u64) -> Result<()> {
-        self.notify_typed(
+        self.notify_ext(
             "x.ai/queue/remove",
             &QueueRemoveParams {
                 session_id: session_id.to_string(),
@@ -293,7 +355,7 @@ impl AcpClient {
     }
 
     pub fn queue_reorder(&self, session_id: &str, ordered_ids: &[String]) -> Result<()> {
-        self.notify_typed(
+        self.notify_ext(
             "x.ai/queue/reorder",
             &QueueReorderParams {
                 session_id: session_id.to_string(),
@@ -304,7 +366,7 @@ impl AcpClient {
     }
 
     pub fn queue_clear(&self, session_id: &str) -> Result<()> {
-        self.notify_typed(
+        self.notify_ext(
             "x.ai/queue/clear",
             &QueueClearParams {
                 session_id: session_id.to_string(),
@@ -314,24 +376,12 @@ impl AcpClient {
     }
 
     pub fn queue_edit(&self, session_id: &str, id: &str, new_text: &str) -> Result<()> {
-        self.notify_typed(
+        self.notify_ext(
             "x.ai/queue/edit",
             &QueueEditParams {
                 session_id: session_id.to_string(),
                 id: id.to_string(),
                 new_text: new_text.to_string(),
-                client_identifier: CLIENT_IDENTIFIER.into(),
-            },
-        )
-    }
-
-    pub fn queue_interject(&self, session_id: &str, id: &str, expected_version: u64) -> Result<()> {
-        self.notify_typed(
-            "x.ai/queue/interject",
-            &QueueInterjectParams {
-                session_id: session_id.to_string(),
-                id: id.to_string(),
-                expected_version,
                 client_identifier: CLIENT_IDENTIFIER.into(),
             },
         )
@@ -354,7 +404,7 @@ impl AcpClient {
 
     /// ACP `x.ai/session/usage` — cumulative session tokens/cost (nested `usage`).
     pub fn session_usage(&self, session_id: &str) -> Result<SessionUsageResult> {
-        let wire: SessionUsageWire = self.call(
+        let wire: SessionUsageWire = self.request_ext_typed(
             "x.ai/session/usage",
             &SessionUsageParams {
                 session_id: session_id.to_string(),
@@ -366,7 +416,7 @@ impl AcpClient {
 
     /// ACP `x.ai/recap` — request a recap (fire-and-forget; text arrives as notification).
     pub fn recap(&self, session_id: &str, auto: bool) -> Result<RecapResult> {
-        self.call(
+        self.request_ext_typed(
             "x.ai/recap",
             &RecapParams {
                 session_id: session_id.to_string(),
@@ -378,7 +428,7 @@ impl AcpClient {
 
     /// ACP `x.ai/rewind/points` — list rewritable prompt indices.
     pub fn rewind_points(&self, session_id: &str) -> Result<RewindPointsResult> {
-        self.call(
+        self.request_ext_typed(
             "x.ai/rewind/points",
             &RewindPointsParams {
                 session_id: session_id.to_string(),
@@ -394,7 +444,7 @@ impl AcpClient {
         target_prompt_index: u64,
         mode: Option<&str>,
     ) -> Result<RewindExecuteResult> {
-        self.call(
+        self.request_ext_typed(
             "x.ai/rewind/execute",
             &RewindExecuteParams {
                 session_id: session_id.to_string(),
@@ -412,7 +462,7 @@ impl AcpClient {
         session_id: &str,
         subagent_id: &str,
     ) -> Result<CancelSubagentResult> {
-        self.call_ext(
+        self.request_ext(
             "x.ai/subagent/cancel",
             &CancelSubagentParams {
                 session_id: Some(session_id.to_string()),
@@ -424,7 +474,7 @@ impl AcpClient {
 
     /// ACP `x.ai/subagent/list_running` — list running subagents for a session.
     pub fn list_subagents(&self, session_id: &str) -> Result<ListSubagentsResult> {
-        self.call_ext(
+        self.request_ext(
             "x.ai/subagent/list_running",
             &ListSubagentsParams {
                 session_id: session_id.to_string(),
@@ -435,7 +485,7 @@ impl AcpClient {
 
     /// ACP `x.ai/task/kill` — kill a background task.
     pub fn kill_task(&self, session_id: &str, task_id: &str) -> Result<KillTaskResult> {
-        self.call_ext(
+        self.request_ext(
             "x.ai/task/kill",
             &KillTaskParams {
                 session_id: session_id.to_string(),
@@ -447,7 +497,7 @@ impl AcpClient {
 
     /// ACP `x.ai/task/list` — list background tasks for a session.
     pub fn list_tasks(&self, session_id: &str) -> Result<ListTasksResult> {
-        self.call_ext(
+        self.request_ext(
             "x.ai/task/list",
             &ListTasksParams {
                 session_id: session_id.to_string(),
@@ -463,7 +513,7 @@ impl AcpClient {
         auto_mode: bool,
         permission_mode: &'static str,
     ) -> Result<()> {
-        self.notify_typed(
+        self.notify_ext(
             "x.ai/yolo_mode_changed",
             &YoloModeChangedParams {
                 yolo_mode,
@@ -568,6 +618,50 @@ fn build_spawn_argv(
 
 #[cfg(test)]
 mod tests {
+
+    /// grok answers only the underscored spelling. Measured against
+    /// agentVersion 1.0.5: a request sent bare returns -32601, a notification
+    /// sent bare is discarded silently.
+    #[test]
+    fn private_extensions_go_out_underscored() {
+        assert_eq!(
+            AcpClient::ext_wire("x.ai/queue/remove"),
+            "_x.ai/queue/remove"
+        );
+        assert_eq!(AcpClient::ext_wire("x.ai/interject"), "_x.ai/interject");
+    }
+
+    /// The guard, rather than the rule.
+    ///
+    /// Every one of these had shipped under a name the agent ignores, and five
+    /// of them are notifications, which cannot report that. Nothing failed and
+    /// nothing logged; usage, recap, rewind, subagent and task control and the
+    /// whole prompt queue simply did nothing. A new call site that reaches for
+    /// `call`/`call_raw`/`call_ext`/`notify_typed` with an `x.ai/` name would
+    /// join them in silence, so the file is checked for it here.
+    #[test]
+    fn no_extension_bypasses_the_ext_helpers() {
+        let src = include_str!("mod.rs");
+        let mut bypassed = Vec::new();
+        for (n, window) in src.lines().collect::<Vec<_>>().windows(4).enumerate() {
+            let Some(name_line) = window.last() else {
+                continue;
+            };
+            if !name_line.trim_start().starts_with("\"x.ai/") {
+                continue;
+            }
+            let before = window[..3].join(" ");
+            let routed = before.contains("request_ext") || before.contains("notify_ext");
+            let called = before.contains("self.call") || before.contains("self.notify_typed");
+            if called && !routed {
+                bypassed.push(format!("line {}: {}", n + 4, name_line.trim()));
+            }
+        }
+        assert!(
+            bypassed.is_empty(),
+            "these reach grok under a name it ignores: {bypassed:#?}"
+        );
+    }
     use super::*;
     use serde_json::json;
     use std::collections::VecDeque;

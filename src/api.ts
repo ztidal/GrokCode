@@ -172,12 +172,16 @@ export async function editQueuedPrompt(
 
 export async function interjectQueuedPrompt(
   handleId: string,
-  entry: Pick<PromptQueueEntry, "id" | "version">,
+  entry: Pick<PromptQueueEntry, "id" | "version" | "text">,
 ): Promise<void> {
+  // The text goes too: the agent has no queue-interject of its own, so running
+  // a queued prompt now means injecting it into the live turn and dropping the
+  // entry behind it.
   return invoke("queue_interject", {
     handleId,
     id: entry.id,
     version: entry.version,
+    text: entry.text,
   });
 }
 

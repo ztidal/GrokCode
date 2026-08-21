@@ -371,10 +371,29 @@ impl AgentManager {
             .map_err(|error| error.user_message())
     }
 
-    pub fn queue_interject(&self, handle_id: &str, id: &str, version: u64) -> Result<(), String> {
+    /// Run a queued prompt now, without waiting for the current turn.
+    ///
+    /// `x.ai/queue/interject` does not exist in the agent — measured against
+    /// agentVersion 1.0.5, under both spellings, as a request and as a
+    /// notification — so this is two operations that do: put the text into the
+    /// turn already running, then drop the entry so the queue cannot run it a
+    /// second time when it drains.
+    ///
+    /// Interject first. If it fails the entry is still queued and nothing the
+    /// user typed has been lost.
+    pub fn queue_interject(
+        &self,
+        handle_id: &str,
+        id: &str,
+        version: u64,
+        text: &str,
+    ) -> Result<(), String> {
         let (session_id, client) = self.resolve_target(handle_id)?;
         client
-            .queue_interject(&session_id, id, version)
+            .session_interject(&session_id, text)
+            .map_err(|error| error.user_message())?;
+        client
+            .queue_remove(&session_id, id, version)
             .map_err(|error| error.user_message())
     }
 

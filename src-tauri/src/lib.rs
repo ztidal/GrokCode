@@ -277,8 +277,9 @@ fn queue_interject(
     handle_id: String,
     id: String,
     version: u64,
+    text: String,
 ) -> Result<(), String> {
-    manager.queue_interject(&handle_id, &id, version)
+    manager.queue_interject(&handle_id, &id, version, &text)
 }
 
 #[tauri::command]

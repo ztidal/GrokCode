@@ -187,7 +187,7 @@ export const PendingRow = memo(function PendingRow({
                 type="button"
                 className="queue-text-btn accent"
                 disabled={locked}
-                title="Interrupt the current turn and run this now"
+                title="Send this into the turn already running, instead of waiting"
                 onClick={() => void run(entry.id, () => controller.interject(entry))}
               >
                 Send now
