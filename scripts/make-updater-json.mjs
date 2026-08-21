@@ -183,6 +183,7 @@ const installers = [
 ];
 
 const platforms = {};
+const checksums = [];
 for (const { keys, subdir, ext } of installers) {
   const path = findBundle(subdir, ext);
   if (!path) die(`no ${ext} bundle under ${join(bundleDir, subdir)} — build with the branding overlay first`);
@@ -201,6 +202,12 @@ for (const { keys, subdir, ext } of installers) {
   }
 
   console.log(`${basename(path)}  ${bytes.length} bytes  verified  (${trustedComment})`);
+  // The landing page tells people to check their download against this file,
+  // so it has to exist on every release. It was written by hand until a
+  // release went out without one, which is the only way that ever ends.
+  checksums.push(
+    `${createHash("sha256").update(bytes).digest("hex")} *${subdir}/${basename(path)}`,
+  );
   for (const key of keys) {
     platforms[key] = { signature, url: `${downloadBase}/${basename(path)}` };
   }
@@ -212,7 +219,11 @@ const pubDate = arg("pub-date", new Date().toISOString().replace(/\.\d{3}Z$/, "Z
 const out = arg("out", join(process.cwd(), "latest.json"));
 writeFileSync(out, `${JSON.stringify({ version, notes, pub_date: pubDate, platforms }, null, 2)}\n`);
 
+const sumsPath = join(dirname(out), "SHA256SUMS.txt");
+writeFileSync(sumsPath, `${checksums.join(String.fromCharCode(10))}${String.fromCharCode(10)}`);
+
 console.log(`\nwrote ${out}`);
+console.log(`wrote ${sumsPath}`);
 console.log(`  version   ${version}   tag ${tag}`);
 for (const [key, meta] of Object.entries(platforms)) {
   console.log(`  ${key.padEnd(21)} ${basename(meta.url)}`);
