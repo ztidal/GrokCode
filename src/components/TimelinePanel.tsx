@@ -25,6 +25,7 @@ import { FilePathLink } from "./FilePathLink";
 import { Markdown } from "./Markdown";
 import { ShellCard } from "./ShellPanel";
 import { TimelineRowChrome, timelineStackClass } from "./TimelineRow";
+import { runEndScroll } from "./endScroll";
 import { PendingRow, type QueueRowUi } from "./PendingRow";
 import type { PromptQueueController } from "../hooks/usePromptQueueController";
 
@@ -220,6 +221,38 @@ export function TimelinePanel({
     setAtBottom(next);
   }, []);
 
+  /*
+   * One scroll is not enough, and that is not a bug in the caller.
+   *
+   * A virtualized list's height is measured rows plus an estimate for every row
+   * that has never been rendered — and scrolling is what renders them. So the
+   * scroll lands, the rows below get measured, the total grows, and the bottom
+   * is now further down than where we stopped. That is why jump-to-latest took
+   * several clicks: the convergence was real, the reader was driving it.
+   */
+  const endScrollStop = useRef<(() => void) | null>(null);
+  const scrollToEnd = useCallback((behavior: ScrollBehavior = "auto") => {
+    endScrollStop.current?.();
+    endScrollStop.current = runEndScroll(
+      {
+        scrollHeight: () => scrollParentRef.current?.scrollHeight ?? 0,
+        scrollToEnd: (pass) => {
+          const end = endRef.current;
+          const parent = scrollParentRef.current;
+          if (end) end.scrollIntoView({ block: "end", behavior: pass });
+          else if (parent) parent.scrollTop = parent.scrollHeight;
+        },
+        stillWanted: () =>
+          stickToBottom.current && Boolean(scrollParentRef.current),
+        schedule: (step) => window.requestAnimationFrame(step),
+        cancel: (handle) => window.cancelAnimationFrame(handle),
+      },
+      behavior,
+    );
+  }, []);
+
+  useEffect(() => () => endScrollStop.current?.(), []);
+
   /** Last reported geometry, to tell a scroll from the content growing. */
   const lastScrollTop = useRef(0);
   const lastScrollHeight = useRef(0);
@@ -258,7 +291,7 @@ export function TimelinePanel({
         `${m.scrollTop - m.listTop}px`,
       );
     }
-  }, [setStick]);
+  }, [setStick, scrollToEnd]);
 
   const virtual = useVirtualWindow(itemKeys, rootRef, scrollParent, {
     onScrollMetrics,
@@ -276,15 +309,6 @@ export function TimelinePanel({
     prevKeysRef.current = next;
   }, [itemKeys, virtual.heightOf]);
 
-  const scrollToEnd = (behavior: ScrollBehavior = "auto") => {
-    const end = endRef.current;
-    const parent = scrollParentRef.current;
-    if (end) {
-      end.scrollIntoView({ block: "end", behavior });
-      return;
-    }
-    if (parent) parent.scrollTop = parent.scrollHeight;
-  };
 
   const jumpToLatest = () => {
     // Re-arm stick before scrolling, as the pinBottomSeq path does, so content
@@ -325,14 +349,14 @@ export function TimelinePanel({
     if (!pinBottomSeq) return;
     setStick(true);
     const t0 = window.requestAnimationFrame(() => scrollToEnd("smooth"));
-    const t1 = window.setTimeout(() => scrollToEnd("smooth"), 80);
-    const t2 = window.setTimeout(() => scrollToEnd("auto"), 320);
+    // One late retry still earns its place: markdown, diffs and images lay out
+    // after the frames the convergence pass covers.
+    const t1 = window.setTimeout(() => scrollToEnd("auto"), 320);
     return () => {
       window.cancelAnimationFrame(t0);
       window.clearTimeout(t1);
-      window.clearTimeout(t2);
     };
-  }, [pinBottomSeq, setStick]);
+  }, [pinBottomSeq, setStick, scrollToEnd]);
 
   if (items.length === 0 && !hasMore) {
     return (
