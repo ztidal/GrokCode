@@ -262,12 +262,21 @@
 }
 
 /* Left specular — glass thickness */
+/*
+ * A specular streak on the upper glass, not a full-height bar.
+ *
+ * It used to run the whole height at 5px wide starting 2px in, which put it
+ * straight through the "8" of a centred "87%" — overlapping the glyphs by 2.6px
+ * and reading as a smudge stuck to the digit. The battery is 36px wide and the
+ * label takes 19 of them centred, so there is no horizontal room to move into:
+ * the streak has to end above the text instead. Light comes from above anyway.
+ */
 .usage-battery-shine {
   position: absolute;
   z-index: 3;
   left: 2px;
-  top: 8%;
-  bottom: 10%;
+  top: 6%;
+  bottom: 72%;
   width: 5px;
   border-radius: 999px;
   background: linear-gradient(
