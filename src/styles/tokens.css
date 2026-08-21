@@ -29,13 +29,13 @@
   --rp-gold: #ea9d34;
   --rp-rose: #d7827e;
   /*
-   * The mark's own blue. #0277bd is 58% of the logo; these are that hue at a
+   * The mark's own blue. #016bc3 is 58% of the logo; these are that hue at a
    * lightness solved to hold the contrast the colour it replaces had against
    * this theme's base, so nothing became harder to read by changing hue. Kept
    * more saturated than the pale Foam it now sits beside, or "accent" and
    * "this window is driving it" would read as the same colour.
    */
-  --rp-brand: #3ba1df;
+  --rp-brand: #4e9fe2;
   --rp-pine: #286983;
   --rp-foam: #56949f;
   --rp-iris: #907aa9;
@@ -56,7 +56,7 @@
   --rp-love-rgb: 180 99 122;
   --rp-gold-rgb: 234 157 52;
   --rp-rose-rgb: 215 130 126;
-  --rp-brand-rgb: 59 161 223;
+  --rp-brand-rgb: 78 159 226;
   --rp-pine-rgb: 40 105 131;
   --rp-foam-rgb: 86 148 159;
   --rp-iris-rgb: 144 122 169;
