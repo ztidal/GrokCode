@@ -845,7 +845,7 @@
 
 .session-cards {
   overflow: auto;
-  padding: 4px 8px 14px 6px;
+  padding: 4px 8px 14px 5px;
   display: flex;
   flex-direction: column;
   /* No boxes to hold apart; the rows' own padding is the rhythm. */
@@ -1038,7 +1038,7 @@
   position: relative;
   /* Left pad clears the mark, which is positioned rather than inline so the
      title keeps its own ellipsis measurement. */
-  padding: 4px 6px 5px 22px;
+  padding: 4px 6px 5px 19px;
   min-width: 0;
 }
 
@@ -1048,7 +1048,7 @@
  */
 .session-mark {
   position: absolute;
-  left: 7px;
+  left: 6px;
   /*
    * Centred on the title's first line, which is why it hangs off `.card-body`
    * rather than the card: a card with a status line above the body would leave
@@ -1059,7 +1059,7 @@
    * mark. It cannot ride on the title as a ::before, because a selected title
    * paints itself with background-clip: text and would clip the mark away too.
    */
-  top: 9px;
+  top: 10px;
   width: 6px;
   height: 6px;
   box-sizing: border-box;
@@ -1110,7 +1110,7 @@
 }
 
 .session-card.state-idle .session-mark {
-  top: 10px;
+  top: 11px;
 }
 
 .card-title {

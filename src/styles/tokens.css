@@ -206,7 +206,17 @@
 
   /* ── Chrome ───────────────────────────────────────────────── */
   --radius: 0;
-  --font: "Segoe UI", system-ui, -apple-system, "SF Pro Text", sans-serif;
+  /*
+   * Latin faces first, then Han. The stack ended at `sans-serif`, which on
+   * Windows resolves Chinese to SimSun — a print serif with none of Segoe UI's
+   * proportions, so a rail of mixed titles read as two different sizes at one
+   * font-size, and nothing lined up with anything. Yahei UI is the face Windows
+   * itself uses for Chinese UI; the rest are the same choice on other systems.
+   */
+  --font:
+    "Segoe UI", system-ui, -apple-system, "SF Pro Text", "Microsoft YaHei UI",
+    "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
+    sans-serif;
   --mono: Consolas, "Cascadia Mono", "Segoe UI Mono", ui-monospace, "SF Mono",
     Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", monospace;
   --scrollbar-size: 8px;
