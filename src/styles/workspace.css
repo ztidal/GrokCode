@@ -1038,7 +1038,7 @@
   position: relative;
   /* Left pad clears the mark, which is positioned rather than inline so the
      title keeps its own ellipsis measurement. */
-  padding: 4px 6px 5px 19px;
+  padding: 5px 6px 5px 19px;
   min-width: 0;
 }
 
@@ -1104,13 +1104,22 @@
   opacity: 1;
 }
 
-/* Idle cards need a touch more top air without a status line above them */
-.session-card.state-idle .card-body {
-  padding-top: 5px;
+/*
+ * Only a request keeps its words.
+ *
+ * The status line cost every non-idle row 13px to say "open" or "running" in
+ * 8px capitals — a band you read as empty space, on rows that are nearly all
+ * non-idle in a rail this size. The mark already carries those in colour, and
+ * hovering a row still names its state. "Needs input" stays, because it is a
+ * request rather than a state, and gets a size you can actually read it at.
+ */
+.session-card:not(.state-awaiting) .card-status {
+  display: none;
 }
 
-.session-card.state-idle .session-mark {
-  top: 11px;
+.session-card.state-awaiting .card-status-text {
+  font-size: 10px;
+  letter-spacing: 0.04em;
 }
 
 .card-title {
