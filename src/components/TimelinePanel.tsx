@@ -61,6 +61,41 @@ export function isNearTimelineBottom(m: VirtualScrollMetrics): boolean {
   return m.scrollHeight - m.scrollTop - m.clientHeight < 64;
 }
 
+/** The geometry a previous report left behind. */
+export interface StreamGeometry {
+  scrollTop: number;
+  scrollHeight: number;
+}
+
+/**
+ * What one metrics report means for following the stream.
+ *
+ * `useVirtualWindow` reports for two different events — the view moved, or the
+ * content resized — and does not say which. Distinguishing them is the whole
+ * job here, because a reply being written into pushes the bottom out of reach
+ * *before* anything scrolls. Reading that as "they scrolled away" unpins the
+ * timeline the instant its own output arrives, and nothing pins it again,
+ * because the pin is what does the pinning.
+ *
+ * So only a view that actually moved up may unpin. Growth under a pinned view
+ * is something to follow, not a decision to respect.
+ *
+ * Exported for unit tests: this repository has no DOM to drive, and the rule is
+ * worth more than the wiring around it.
+ */
+export function readStickIntent(
+  m: VirtualScrollMetrics,
+  previous: StreamGeometry,
+  pinned: boolean,
+): { pinned: boolean; follow: boolean } {
+  // 1px, because a fractional scroll position is not a decision.
+  const movedUp = m.scrollTop < previous.scrollTop - 1;
+  const grew = m.scrollHeight > previous.scrollHeight;
+  const nearBottom = isNearTimelineBottom(m);
+  const next = movedUp || nearBottom ? nearBottom : pinned;
+  return { pinned: next, follow: grew && next };
+}
+
 export function TimelinePanel({
   items,
   managed,
@@ -159,12 +194,38 @@ export function TimelinePanel({
     [filtered],
   );
 
-  // Single scroll listener lives in useVirtualWindow; panel only updates
-  // stick / fade / jump-button visibility.
+  /** Last reported geometry, to tell a scroll from the content growing. */
+  const lastScrollTop = useRef(0);
+  const lastScrollHeight = useRef(0);
+
+  /*
+   * `useVirtualWindow` owns the single scroll listener, and reports here for two
+   * different events: the view moved, or the content resized. It observes the
+   * list as well as the scroll parent, so a reply being written into produces a
+   * report with nothing scrolled.
+   *
+   * Telling them apart is the whole job. Growth pushes the bottom out of reach
+   * before anything has moved, so reading that as "they scrolled up" unpinned
+   * the timeline the instant its own output arrived — and then nothing pinned it
+   * again, because the pin was off. Only a view that actually moved up may
+   * unpin; growth under a pinned view is followed instead.
+   */
   const onScrollMetrics = useCallback((m: VirtualScrollMetrics) => {
-    const nearBottom = isNearTimelineBottom(m);
-    stickToBottom.current = nearBottom;
-    setAtBottom(nearBottom);
+    const intent = readStickIntent(
+      m,
+      { scrollTop: lastScrollTop.current, scrollHeight: lastScrollHeight.current },
+      stickToBottom.current,
+    );
+    lastScrollTop.current = m.scrollTop;
+    lastScrollHeight.current = m.scrollHeight;
+
+    if (intent.pinned !== stickToBottom.current) setAtBottom(intent.pinned);
+    stickToBottom.current = intent.pinned;
+
+    // The report that says the content got taller is also where following it
+    // belongs; a second observer for the same event would only race this one.
+    if (intent.follow) scrollToEnd("auto");
+
     const root = rootRef.current;
     if (root) {
       root.style.setProperty(
@@ -234,31 +295,6 @@ export function TimelinePanel({
     if (!stickToBottom.current || !virtual.active) return;
     scrollToEnd("auto");
   }, [virtual.totalHeight, virtual.active]);
-
-  /*
-   * Content growing in place, which is most of a streaming turn.
-   *
-   * The two effects above fire when items are added and when the virtual window
-   * remeasures. Neither happens while a message already on screen is still
-   * being written into — and on a session short enough that virtualising never
-   * switches on, the second never fires at all. Watching the list's own box
-   * catches every way it can get taller, including a tool block expanding or an
-   * image finishing its load.
-   *
-   * Safe against a feedback loop: scrolling the parent does not change the size
-   * of the element being observed.
-   */
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      if (stickToBottom.current) scrollToEnd("auto");
-    });
-    observer.observe(root);
-    return () => observer.disconnect();
-    // Refs only inside, so the first render's closure stays correct.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     if (!pinBottomSeq) return;
