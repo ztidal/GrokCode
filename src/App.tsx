@@ -1077,6 +1077,13 @@ function App() {
             onNewTaskInProject={openNewTask}
             hasMore={hasMoreSessions}
             onLoadMore={loadMoreSessions}
+            onDeleted={(id) => {
+              // The list is the authority on what is on disk, so re-read it
+              // rather than splicing the card out here. Selection first: an
+              // open task that no longer exists would keep its detail pane.
+              if (selectedIdRef.current === id) setSelectedId(null);
+              void refreshList();
+            }}
           />
         </aside>
 

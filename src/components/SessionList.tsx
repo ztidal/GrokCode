@@ -75,6 +75,15 @@ interface Props {
   onNewTaskInProject?: (cwd: string) => void;
   hasMore?: boolean;
   onLoadMore?: () => void;
+  /**
+   * A task was moved to the trash and is no longer on disk.
+   *
+   * The card cannot wait for the filesystem watcher to notice: deleting renames
+   * the session's *directory*, and `classify_path` only recognises the files
+   * inside one (`summary.json`, `updates.jsonl`, …), so a vanished session
+   * produces no event at all. The list has to be told.
+   */
+  onDeleted?: (sessionId: string) => void;
 }
 
 export function SessionList({
@@ -90,6 +99,7 @@ export function SessionList({
   onNewTaskInProject,
   hasMore,
   onLoadMore,
+  onDeleted,
 }: Props) {
   const { pinnedIds, isPinned, togglePinned, unpin } = useSessionPins();
   const { archivedIds, isArchived, toggleArchived } = useSessionArchive();
@@ -491,10 +501,12 @@ export function SessionList({
                   const card = pendingDelete;
                   void trashSession(card.id)
                     .then(() => {
-                      // The watcher drops the card on its own; clear our own
-                      // notes so a new session cannot inherit them by id reuse.
+                      // Clear our own notes so a new session cannot inherit
+                      // them by id reuse, then tell the list: nothing else
+                      // will, the watcher included.
                       unpin(card.id);
                       setPendingDelete(null);
+                      onDeleted?.(card.id);
                     })
                     .catch((e: unknown) =>
                       setDeleteError(
