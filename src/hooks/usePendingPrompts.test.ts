@@ -128,6 +128,20 @@ describe("composeTimelineTail", () => {
     expect(out[1]!.pending?.entry?.id).toBe("q0");
   });
 
+  it("does not show one task's pending prompt at the bottom of another", () => {
+    // The pending store is flat across sessions; the queue it sits beside is
+    // already scoped, and the two have to agree.
+    const mine = composeTimelineTail(
+      items,
+      [pending("run tests", { sessionId: "other" })],
+      null,
+      "h",
+      "s",
+      NOW,
+    );
+    expect(mine).toBe(items);
+  });
+
   it("keeps the queue in the order it will run", () => {
     const out = composeTimelineTail(items, [], queue("a", "b", "c"), "h", "s", NOW);
     expect(out.slice(1).map((i) => i.detail)).toEqual(["a", "b", "c"]);

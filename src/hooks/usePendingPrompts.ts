@@ -65,8 +65,12 @@ export function composeTimelineTail(
   now: number,
 ): TimelineItem[] {
   const entries = queue?.entries ?? [];
+  // Scoped to this session, the way the queue itself already is. The store is
+  // flat, so without this a prompt left pending in one task would appear at the
+  // bottom of whichever task you switched to.
   const unresolved = pending.filter(
-    (item) => !isPendingResolved(item, items, queue),
+    (item) =>
+      item.sessionId === sessionId && !isPendingResolved(item, items, queue),
   );
   if (!entries.length && !unresolved.length) return items;
 
