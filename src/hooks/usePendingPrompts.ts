@@ -8,7 +8,7 @@ import type { PromptQueueState, TimelineItem } from "../types";
  * composer has cleared, grok has not echoed it back, and — mid-turn — its queue
  * has not reported it either. That gap is one round trip long and reads as the
  * message having been swallowed. These stand in for it until the real thing
- * arrives, and are dropped the moment it does.
+ * arrives, and are retired the moment it does.
  */
 export interface PendingPrompt {
   id: string;
@@ -22,56 +22,107 @@ export interface PendingPrompt {
 /**
  * How far back an echo may sit and still be read as this prompt's own.
  *
- * Without a window, sending the same text twice in a session would match the
- * first send's echo and the second placeholder would never appear.
+ * Without a window, a message sent twice in a session would match the first
+ * send's echo and the second placeholder would never appear.
  */
 const ECHO_SKEW_MS = 2000;
+
+/**
+ * How long a submission may go unacknowledged before we stop claiming it is on
+ * its way.
+ *
+ * `AgentManager::prompt` returns `accepted: true` as soon as it has handed the
+ * text to a worker, before the RPC is attempted, so the send's promise resolves
+ * whether or not the prompt ever reaches grok — there is no failure to catch.
+ * Silence past this point is the only signal a send was lost, and a row that
+ * claims to be waiting forever is worse than one that goes away.
+ */
+const ACK_TIMEOUT_MS = 60_000;
 
 /** Whitespace-insensitive identity; grok re-flows what it echoes. */
 export function promptKey(text: string): string {
   return text.trim().replace(/\s+/g, " ");
 }
 
-/** True once the stream or the queue accounts for this prompt. */
-export function isPendingResolved(
-  pending: PendingPrompt,
+/**
+ * The submissions this session is still standing in for.
+ *
+ * Accounting is per occurrence rather than by presence: sending "continue"
+ * while an earlier "continue" is still queued has to leave two rows, so each
+ * queue entry, running prompt and echo can settle exactly one placeholder.
+ */
+export function unresolvedPending(
+  pending: PendingPrompt[],
   items: TimelineItem[],
   queue: PromptQueueState | null,
-): boolean {
-  const key = promptKey(pending.text);
-  if ((queue?.entries ?? []).some((entry) => promptKey(entry.text) === key)) {
-    return true;
+  sessionId: string | null,
+  now: number,
+): PendingPrompt[] {
+  const mine = pending.filter((item) => item.sessionId === sessionId);
+  if (!mine.length) return mine;
+
+  const credits = new Map<string, number>();
+  const credit = (text: string | null | undefined) => {
+    if (!text) return;
+    const key = promptKey(text);
+    credits.set(key, (credits.get(key) ?? 0) + 1);
+  };
+  for (const entry of queue?.entries ?? []) {
+    credit(entry.text);
+    // grok may merge adjacent submissions into one entry; each message it
+    // swallowed still has a placeholder waiting to be settled.
+    for (const part of entry.combinedTexts ?? []) credit(part);
   }
-  if (queue?.runningText && promptKey(queue.runningText) === key) return true;
-  return items.some(
-    (item) =>
-      item.kind === "user" &&
-      item.ts >= pending.ts - ECHO_SKEW_MS &&
-      promptKey(item.detail ?? item.title ?? "") === key,
-  );
+  credit(queue?.runningText);
+  for (const part of queue?.runningCombinedTexts ?? []) credit(part);
+
+  const spentEchoes = new Set<string>();
+  const unresolved: PendingPrompt[] = [];
+  for (const item of [...mine].sort((a, b) => a.ts - b.ts)) {
+    if (now - item.ts > ACK_TIMEOUT_MS) continue;
+
+    const key = promptKey(item.text);
+    const owed = credits.get(key) ?? 0;
+    if (owed > 0) {
+      credits.set(key, owed - 1);
+      continue;
+    }
+
+    const echo = items.find(
+      (candidate) =>
+        candidate.kind === "user" &&
+        !candidate.pending &&
+        !spentEchoes.has(candidate.id) &&
+        candidate.ts >= item.ts - ECHO_SKEW_MS &&
+        promptKey(candidate.detail ?? candidate.title ?? "") === key,
+    );
+    if (echo) {
+      spentEchoes.add(echo.id);
+      continue;
+    }
+
+    unresolved.push(item);
+  }
+  return unresolved;
 }
 
 /**
  * The timeline plus everything submitted but not yet run, in the order it will
  * run. Composed for display only — the underlying item list stays untouched so
  * turn status and filters keep counting real events.
+ *
+ * These rows carry no timestamp. Nothing has happened yet, and a clock on them
+ * would have to be sampled per render: the memo above this recomputes on every
+ * streamed chunk, so the time would visibly crawl while the agent worked.
  */
 export function composeTimelineTail(
   items: TimelineItem[],
-  pending: PendingPrompt[],
+  unresolved: PendingPrompt[],
   queue: PromptQueueState | null,
   handleId: string,
   sessionId: string | null,
-  now: number,
 ): TimelineItem[] {
   const entries = queue?.entries ?? [];
-  // Scoped to this session, the way the queue itself already is. The store is
-  // flat, so without this a prompt left pending in one task would appear at the
-  // bottom of whichever task you switched to.
-  const unresolved = pending.filter(
-    (item) =>
-      item.sessionId === sessionId && !isPendingResolved(item, items, queue),
-  );
   if (!entries.length && !unresolved.length) return items;
 
   const tail: TimelineItem[] = [];
@@ -83,7 +134,7 @@ export function composeTimelineTail(
       kind: "user",
       title: "",
       detail: entry.text,
-      ts: now + tail.length,
+      ts: 0,
       pending: { state: "queued", entry },
     });
   }
@@ -95,7 +146,7 @@ export function composeTimelineTail(
       kind: "user",
       title: "",
       detail: item.text,
-      ts: now + tail.length,
+      ts: 0,
       pending: { state: item.queued ? "queued" : "sending" },
     });
   }
@@ -106,8 +157,23 @@ export interface PendingPromptsController {
   pending: PendingPrompt[];
   /** Show this text at the tail until grok accounts for it. */
   remember: (sessionId: string, text: string, queued: boolean) => string;
-  /** Drop a placeholder whose send failed — nothing will ever echo it. */
-  forget: (id: string) => void;
+  /**
+   * Forget placeholders that are finished with — settled, timed out, or sent
+   * from a path that failed before dispatch.
+   *
+   * Retiring matters as much as showing: resolution is re-derived from the
+   * loaded timeline window, so a placeholder left in the store comes back the
+   * moment its echo scrolls out of that window.
+   */
+  retire: (ids: string[]) => void;
+  /**
+   * Drop everything this task is still standing in for, because a prompt it
+   * dispatched came back an error.
+   *
+   * Settled placeholders are already gone by the time this runs, so whatever
+   * remains is a message that will never be echoed and never be queued.
+   */
+  retireSession: (sessionId: string) => void;
 }
 
 export function usePendingPrompts(): PendingPromptsController {
@@ -125,9 +191,21 @@ export function usePendingPrompts(): PendingPromptsController {
     [],
   );
 
-  const forget = useCallback((id: string) => {
-    setPending((previous) => previous.filter((item) => item.id !== id));
+  const retire = useCallback((ids: string[]) => {
+    if (!ids.length) return;
+    const drop = new Set(ids);
+    setPending((previous) => {
+      const next = previous.filter((item) => !drop.has(item.id));
+      return next.length === previous.length ? previous : next;
+    });
   }, []);
 
-  return { pending, remember, forget };
+  const retireSession = useCallback((sessionId: string) => {
+    setPending((previous) => {
+      const next = previous.filter((item) => item.sessionId !== sessionId);
+      return next.length === previous.length ? previous : next;
+    });
+  }, []);
+
+  return { pending, remember, retire, retireSession };
 }

@@ -25,7 +25,7 @@ import { FilePathLink } from "./FilePathLink";
 import { Markdown } from "./Markdown";
 import { ShellCard } from "./ShellPanel";
 import { TimelineRowChrome, timelineStackClass } from "./TimelineRow";
-import { PendingRow } from "./PendingRow";
+import { PendingRow, type QueueRowUi } from "./PendingRow";
 import type { PromptQueueController } from "../hooks/usePromptQueueController";
 
 const TIMELINE_FILTER_LABELS: Record<string, string> = {
@@ -108,6 +108,7 @@ export function TimelinePanel({
   loadingOlder,
   onLoadOlder,
   queue,
+  queueUi,
 }: {
   items: TimelineItem[];
   managed: ManagedAgentInfo | null;
@@ -118,6 +119,8 @@ export function TimelinePanel({
   onLoadOlder: () => Promise<void>;
   /** Present so a submitted-but-not-run row can be edited, moved or run now. */
   queue?: PromptQueueController;
+  /** Lifted out of the rows, which the virtualiser unmounts as they scroll away. */
+  queueUi?: QueueRowUi;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -130,9 +133,12 @@ export function TimelinePanel({
   const [atBottom, setAtBottom] = useState(true);
   const prevKeysRef = useRef<string[]>([]);
 
+  // Counts describe what happened, so a message still waiting to run is not
+  // one of them — it is appended to `items` for display only.
   const kindCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const item of items) {
+      if (item.pending) continue;
       const k = item.kind || "unknown";
       counts.set(k, (counts.get(k) ?? 0) + 1);
     }
@@ -354,7 +360,10 @@ export function TimelinePanel({
       >
         <span className="timeline-filter-indicator" aria-hidden />
         {filterChips.map((k) => {
-          const count = k === "all" ? items.length : (kindCounts.get(k) ?? 0);
+          const count =
+            k === "all"
+              ? items.reduce((n, item) => (item.pending ? n : n + 1), 0)
+              : (kindCounts.get(k) ?? 0);
           const label = TIMELINE_FILTER_LABELS[k] ?? k;
           return (
             <button
@@ -415,6 +424,7 @@ export function TimelinePanel({
                   item={item}
                   stackClass={stackClass}
                   controller={queue}
+                  ui={queueUi}
                 />
               ) : (
                 <LiveItemRow

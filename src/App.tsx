@@ -203,6 +203,32 @@ function App() {
     liveOwnsTail,
   );
   const pendingPrompts = usePendingPrompts();
+
+  // A prompt that failed on the wire resolves `promptAgent` happily — the Rust
+  // side answers `accepted: true` as soon as it has handed the text to a worker
+  // — so this event is the only prompt failure the host ever hears about. Left
+  // unhandled, a lost message keeps a row claiming it is on its way. The
+  // transport-failure path emits nothing at all, which is what the placeholder's
+  // own acknowledgement timeout is for.
+  const retirePendingForSession = pendingPrompts.retireSession;
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    void listen<{ sessionId?: string | null; error?: string }>(
+      "agent-prompt-complete",
+      ({ payload }) => {
+        if (cancelled || !payload.error || !payload.sessionId) return;
+        retirePendingForSession(payload.sessionId);
+      },
+    ).then((dispose) => {
+      if (cancelled) dispose();
+      else unlisten = dispose;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [retirePendingForSession]);
   const promptQueue = usePromptQueueController(
     selectedId,
     managedForSession,
@@ -416,11 +442,17 @@ function App() {
     };
   }, [refreshList, refreshDetail, refreshCard]);
 
-  // These are advertised ACP capabilities, so consume their notifications
-  // and invalidate the workspace immediately.
+  // These are advertised ACP capabilities, so consume their notifications and
+  // invalidate the workspace.
+  //
+  // Coalesced, because they arrive per filesystem event and an agent editing a
+  // tree emits a burst of them. Until the notification names were canonicalised
+  // none of these was delivered at all, so the unthrottled refresh that used to
+  // be here had never actually run against real traffic.
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
+    let coalesce: number | null = null;
     void listen<{
       method?: string;
       sessionId?: string | null;
@@ -437,14 +469,20 @@ function App() {
       if (payload.sessionId && selected && payload.sessionId !== selected) {
         return;
       }
-      setGitRefreshKey((n) => n + 1);
-      if (selected) void refreshDetail(selected, true);
+      if (coalesce != null) window.clearTimeout(coalesce);
+      coalesce = window.setTimeout(() => {
+        coalesce = null;
+        setGitRefreshKey((n) => n + 1);
+        const current = selectedIdRef.current;
+        if (current) void refreshDetail(current, true);
+      }, 250);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
     });
     return () => {
       cancelled = true;
+      if (coalesce != null) window.clearTimeout(coalesce);
       unlisten?.();
     };
   }, [refreshDetail]);
@@ -800,13 +838,13 @@ function App() {
         const sessionId = selectedId ?? sessions[0]?.id ?? null;
         if (!sessionId) {
           setError("Select a task first, or create one with New.");
-          if (pendingId) pendingPrompts.forget(pendingId);
+          if (pendingId) pendingPrompts.retire([pendingId]);
           return;
         }
         const info = await ensureAttached(sessionId);
         if (!info) {
           setError("Could not connect to this task.");
-          if (pendingId) pendingPrompts.forget(pendingId);
+          if (pendingId) pendingPrompts.retire([pendingId]);
           return;
         }
         liveAgent = info;
@@ -847,9 +885,12 @@ function App() {
       }
       setPinTimelineBottomSeq((n) => n + 1);
     } catch (e) {
-      // Nothing will ever echo a send that failed; leaving the row would be a
-      // message the user believes is waiting to run.
-      if (pendingId) pendingPrompts.forget(pendingId);
+      // Only failures raised before dispatch land here: `AgentManager::prompt`
+      // returns `accepted: true` once it has handed the text to a worker, so a
+      // send that dies on the wire resolves this promise happily. A placeholder
+      // that outlives its acknowledgement window is retired on that timeout
+      // instead — this covers connect and mode errors, not lost prompts.
+      if (pendingId) pendingPrompts.retire([pendingId]);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setControlBusy(false);
@@ -1125,6 +1166,8 @@ function App() {
           onSessionModeChange={(m) => void handleSessionModeChange(m)}
           onSendPrompt={(t) => void handleSend(t)}
           pendingPrompts={pendingPrompts.pending}
+          onRetirePending={pendingPrompts.retire}
+          pendingSessionId={selectedId}
           promptQueue={promptQueue}
           onResolvePermission={(item, opt, comments, payload) =>
             void handleResolvePermission(item, opt, comments, payload)

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   composeTimelineTail,
-  isPendingResolved,
   promptKey,
+  unresolvedPending,
   type PendingPrompt,
 } from "./usePendingPrompts";
 import type { PromptQueueState, TimelineItem } from "../types";
@@ -10,7 +10,7 @@ import type { PromptQueueState, TimelineItem } from "../types";
 const NOW = 1_700_000_000_000;
 
 const pending = (text: string, over?: Partial<PendingPrompt>): PendingPrompt => ({
-  id: "p1",
+  id: `p-${text}`,
   sessionId: "s",
   text,
   ts: NOW,
@@ -19,7 +19,7 @@ const pending = (text: string, over?: Partial<PendingPrompt>): PendingPrompt => 
 });
 
 const userItem = (text: string, ts = NOW): TimelineItem => ({
-  id: `u-${ts}`,
+  id: `u-${text}-${ts}`,
   handleId: "h",
   kind: "user",
   title: "",
@@ -38,45 +38,82 @@ const queue = (...texts: string[]): PromptQueueState => ({
   })),
 });
 
+const live = (
+  p: PendingPrompt[],
+  items: TimelineItem[] = [],
+  q: PromptQueueState | null = null,
+  now = NOW,
+) => unresolvedPending(p, items, q, "s", now).map((x) => x.text);
+
 describe("promptKey", () => {
   it("ignores the whitespace grok re-flows", () => {
     expect(promptKey("  fix   the\nparser ")).toBe("fix the parser");
   });
 });
 
-describe("isPendingResolved", () => {
-  it("is unresolved while nothing accounts for it", () => {
-    expect(isPendingResolved(pending("run tests"), [], null)).toBe(false);
+describe("unresolvedPending", () => {
+  it("stands in for a message nothing accounts for yet", () => {
+    expect(live([pending("run tests")])).toEqual(["run tests"]);
   });
 
-  it("resolves once grok echoes it into the stream", () => {
-    expect(
-      isPendingResolved(pending("run tests"), [userItem("run tests")], null),
-    ).toBe(true);
+  it("stops once grok echoes it into the stream", () => {
+    expect(live([pending("run tests")], [userItem("run tests")])).toEqual([]);
   });
 
-  it("resolves once it shows up in the queue", () => {
-    expect(isPendingResolved(pending("run tests"), [], queue("run tests"))).toBe(
-      true,
-    );
+  it("stops once it appears in the queue", () => {
+    expect(live([pending("run tests")], [], queue("run tests"))).toEqual([]);
   });
 
-  it("resolves against the prompt grok is running right now", () => {
+  it("stops for the prompt grok is running right now", () => {
     // Interject promotes an entry out of the queue and into the turn; without
-    // this the placeholder would come back the moment the queue emptied.
+    // this the placeholder would return the moment the queue emptied.
     expect(
-      isPendingResolved(pending("run tests"), [], {
+      live([pending("run tests")], [], {
         sessionId: "s",
         entries: [],
         runningText: "run tests",
       }),
-    ).toBe(true);
+    ).toEqual([]);
   });
 
-  it("does not let an older identical message resolve a new one", () => {
+  it("does not let an older identical message settle a new one", () => {
     // Sending the same thing twice is ordinary — "continue", "go on", "again".
-    const old = userItem("again", NOW - 60_000);
-    expect(isPendingResolved(pending("again"), [old], null)).toBe(false);
+    expect(live([pending("again")], [userItem("again", NOW - 60_000)])).toEqual([
+      "again",
+    ]);
+  });
+
+  it("settles one placeholder per occurrence, not all of them", () => {
+    // Two "continue" submitted, one of them queued so far: the other is still
+    // unaccounted for and has to keep its row.
+    const two = [
+      pending("continue", { id: "a", ts: NOW - 1000 }),
+      pending("continue", { id: "b" }),
+    ];
+    expect(live(two, [], queue("continue"))).toEqual(["continue"]);
+    expect(live(two, [], queue("continue", "continue"))).toEqual([]);
+  });
+
+  it("spends each echo once", () => {
+    const two = [
+      pending("again", { id: "a", ts: NOW - 1000 }),
+      pending("again", { id: "b" }),
+    ];
+    expect(live(two, [userItem("again")])).toEqual(["again"]);
+  });
+
+  it("belongs to the task it was typed in", () => {
+    // The store is flat across tasks; the queue beside it is already scoped.
+    expect(live([pending("run tests", { sessionId: "other" })])).toEqual([]);
+  });
+
+  it("gives up on a message that was never acknowledged", () => {
+    // A send that dies on the wire still resolves its promise, so silence is
+    // the only signal it was lost. A row waiting forever is worse than none.
+    expect(live([pending("run tests")], [], null, NOW + 61_000)).toEqual([]);
+    expect(live([pending("run tests")], [], null, NOW + 30_000)).toEqual([
+      "run tests",
+    ]);
   });
 });
 
@@ -84,18 +121,11 @@ describe("composeTimelineTail", () => {
   const items = [userItem("first", NOW - 10_000)];
 
   it("leaves the timeline alone when nothing is outstanding", () => {
-    expect(composeTimelineTail(items, [], null, "h", "s", NOW)).toBe(items);
+    expect(composeTimelineTail(items, [], null, "h", "s")).toBe(items);
   });
 
   it("shows a just-sent prompt before anything has come back", () => {
-    const out = composeTimelineTail(
-      items,
-      [pending("run tests")],
-      null,
-      "h",
-      "s",
-      NOW,
-    );
+    const out = composeTimelineTail(items, [pending("run tests")], null, "h", "s");
     expect(out).toHaveLength(2);
     expect(out[1]!.detail).toBe("run tests");
     expect(out[1]!.pending?.state).toBe("sending");
@@ -108,64 +138,38 @@ describe("composeTimelineTail", () => {
       null,
       "h",
       "s",
-      NOW,
     );
     expect(out[1]!.pending?.state).toBe("queued");
   });
 
-  it("hands the row to grok once the queue reports it, without doubling it", () => {
-    // The placeholder and the real entry are the same message; showing both is
-    // the bug this whole layer exists to avoid.
+  it("carries no clock, because nothing has happened yet", () => {
+    // The memo above this recomputes on every streamed chunk, so a sampled
+    // time would visibly crawl while the agent worked.
     const out = composeTimelineTail(
       items,
-      [pending("run tests", { queued: true })],
-      queue("run tests"),
+      [pending("run tests")],
+      queue("later"),
       "h",
+      "s",
+    );
+    expect(out.slice(1).every((row) => !row.ts)).toBe(true);
+  });
+
+  it("hands the row to grok once the queue reports it, without doubling it", () => {
+    const settled = unresolvedPending(
+      [pending("run tests", { queued: true })],
+      items,
+      queue("run tests"),
       "s",
       NOW,
     );
+    const out = composeTimelineTail(items, settled, queue("run tests"), "h", "s");
     expect(out).toHaveLength(2);
     expect(out[1]!.pending?.entry?.id).toBe("q0");
   });
 
-  it("does not show one task's pending prompt at the bottom of another", () => {
-    // The pending store is flat across sessions; the queue it sits beside is
-    // already scoped, and the two have to agree.
-    const mine = composeTimelineTail(
-      items,
-      [pending("run tests", { sessionId: "other" })],
-      null,
-      "h",
-      "s",
-      NOW,
-    );
-    expect(mine).toBe(items);
-  });
-
   it("keeps the queue in the order it will run", () => {
-    const out = composeTimelineTail(items, [], queue("a", "b", "c"), "h", "s", NOW);
+    const out = composeTimelineTail(items, [], queue("a", "b", "c"), "h", "s");
     expect(out.slice(1).map((i) => i.detail)).toEqual(["a", "b", "c"]);
-  });
-
-  it("drops a placeholder once the prompt has actually run", () => {
-    const out = composeTimelineTail(
-      items,
-      [pending("run tests")],
-      null,
-      "h",
-      "s",
-      NOW,
-    );
-    expect(out).toHaveLength(2);
-    const after = composeTimelineTail(
-      [...items, userItem("run tests")],
-      [pending("run tests")],
-      null,
-      "h",
-      "s",
-      NOW,
-    );
-    expect(after).toHaveLength(2);
-    expect(after.every((i) => !i.pending)).toBe(true);
   });
 });

@@ -1,7 +1,9 @@
 import {
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type CSSProperties,
 } from "react";
 import type {
@@ -28,6 +30,7 @@ import type { ResolvePermissionFn } from "../utils/permissionPayload";
 import type { PromptQueueController } from "../hooks/usePromptQueueController";
 import {
   composeTimelineTail,
+  unresolvedPending,
   type PendingPrompt,
 } from "../hooks/usePendingPrompts";
 import { DiffPanel } from "./DiffPanel";
@@ -55,6 +58,9 @@ interface Props {
   onSendPrompt: (text: string) => void;
   promptQueue: PromptQueueController;
   pendingPrompts: PendingPrompt[];
+  onRetirePending: (ids: string[]) => void;
+  /** The selected task, which leads the loaded detail during a switch. */
+  pendingSessionId: string | null;
   onResolvePermission: ResolvePermissionFn;
   /** Stop the live agent for this task (confirm handled by parent). */
   onStopAgent?: () => void;
@@ -95,6 +101,8 @@ export function SessionDetailView({
   onSendPrompt,
   promptQueue,
   pendingPrompts,
+  onRetirePending,
+  pendingSessionId,
   onResolvePermission,
   onStopAgent,
   pinTimelineBottomSeq = 0,
@@ -108,20 +116,68 @@ export function SessionDetailView({
 }: Props) {
   const tabBodyRef = useRef<HTMLDivElement>(null);
 
-  // Composed for display only. Turn status, filters and the subagent strip keep
-  // reading the real list, so a message that has not run cannot be counted as
-  // something that happened.
+  // Scoped to the selected task rather than the loaded one: selecting another
+  // task changes the selection immediately while `detail` still describes the
+  // previous one, and the stale id would put one task's pending message at the
+  // bottom of another.
+  const unresolved = useMemo(
+    () =>
+      unresolvedPending(
+        pendingPrompts,
+        timelineItems,
+        promptQueue.queue,
+        pendingSessionId,
+        Date.now(),
+      ),
+    [pendingPrompts, timelineItems, promptQueue.queue, pendingSessionId],
+  );
+
+  // Settling has to be made permanent. Resolution is derived from the loaded
+  // window, so a placeholder left in the store reappears the moment its echo
+  // scrolls out of that window.
+  useEffect(() => {
+    const live = new Set(unresolved.map((item) => item.id));
+    const settled = pendingPrompts
+      .filter(
+        (item) => item.sessionId === pendingSessionId && !live.has(item.id),
+      )
+      .map((item) => item.id);
+    if (settled.length) onRetirePending(settled);
+  }, [pendingPrompts, unresolved, pendingSessionId, onRetirePending]);
+
+  // The composed list is for display only. Turn status, filters and the
+  // subagent strip keep reading the real one, so a message that has not run
+  // cannot be counted as something that happened.
   const timelineWithPending = useMemo(
     () =>
       composeTimelineTail(
         timelineItems,
-        pendingPrompts,
+        unresolved,
         promptQueue.queue,
         managed?.handleId ?? "",
-        detail?.card.id ?? null,
-        Date.now(),
+        pendingSessionId,
       ),
-    [timelineItems, pendingPrompts, promptQueue.queue, managed, detail],
+    [timelineItems, unresolved, promptQueue.queue, managed, pendingSessionId],
+  );
+
+  // Held here rather than in the rows. Queued rows sit at the tail and the
+  // virtualiser unmounts them as soon as they scroll out of view, which would
+  // discard a half-typed edit without saying so; and the interlock has to be
+  // shared, because reorder sends a whole-queue ordering — two rows acting at
+  // once would each compute it from the same stale list.
+  const [queueDraft, setQueueDraft] = useState<{
+    id: string;
+    text: string;
+  } | null>(null);
+  const [queueBusy, setQueueBusy] = useState<string | null>(null);
+  const queueUi = useMemo(
+    () => ({
+      draft: queueDraft,
+      setDraft: setQueueDraft,
+      busyKey: queueBusy,
+      setBusyKey: setQueueBusy,
+    }),
+    [queueDraft, queueBusy],
   );
 
   // Timeline pins to bottom; Diff / Raw expect top. Shared .tab-body
@@ -256,6 +312,7 @@ export function SessionDetailView({
           <TimelinePanel
             items={timelineWithPending}
             queue={promptQueue}
+            queueUi={queueUi}
             managed={managed}
             pinBottomSeq={pinTimelineBottomSeq}
             onOpenFile={onOpenFile}
