@@ -31,6 +31,7 @@ import { WorkspaceSplitter } from "./components/WorkspaceSplitter";
 import { useAgentEvents } from "./hooks/useAgentEvents";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { usePromptQueueController } from "./hooks/usePromptQueueController";
+import { usePendingPrompts } from "./hooks/usePendingPrompts";
 import { useSessionDefaults } from "./hooks/useSessionDefaults";
 import { useSessionModel } from "./hooks/useSessionModel";
 import { useSessionPlanMode } from "./hooks/useSessionPlanMode";
@@ -201,6 +202,7 @@ function App() {
     hydrateDiskLive,
     liveOwnsTail,
   );
+  const pendingPrompts = usePendingPrompts();
   const promptQueue = usePromptQueueController(
     selectedId,
     managedForSession,
@@ -739,6 +741,9 @@ function App() {
   async function handleSend(text: string) {
     const trimmed = text.trim();
     if (!trimmed) return;
+    // Stands in for the message until grok echoes it or queues it. Without it
+    // the text leaves the composer and exists nowhere for a round trip.
+    let pendingId: string | null = null;
     setControlBusy(true);
     setError(null);
     setTab("timeline");
@@ -772,6 +777,16 @@ function App() {
         }
       }
 
+      const pendingSessionId = selectedId ?? sessions[0]?.id ?? null;
+      if (pendingSessionId) {
+        pendingId = pendingPrompts.remember(
+          pendingSessionId,
+          trimmed,
+          managedForSession?.status === "running" ||
+            managedForSession?.status === "stopping",
+        );
+      }
+
       // Connect on first agent message (no attach switch). Local slashes above
       // already returned without needing ACP.
       let liveAgent = managedForSession;
@@ -785,11 +800,13 @@ function App() {
         const sessionId = selectedId ?? sessions[0]?.id ?? null;
         if (!sessionId) {
           setError("Select a task first, or create one with New.");
+          if (pendingId) pendingPrompts.forget(pendingId);
           return;
         }
         const info = await ensureAttached(sessionId);
         if (!info) {
           setError("Could not connect to this task.");
+          if (pendingId) pendingPrompts.forget(pendingId);
           return;
         }
         liveAgent = info;
@@ -830,6 +847,9 @@ function App() {
       }
       setPinTimelineBottomSeq((n) => n + 1);
     } catch (e) {
+      // Nothing will ever echo a send that failed; leaving the row would be a
+      // message the user believes is waiting to run.
+      if (pendingId) pendingPrompts.forget(pendingId);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setControlBusy(false);
@@ -1104,6 +1124,7 @@ function App() {
           sessionMode={effectiveSessionMode}
           onSessionModeChange={(m) => void handleSessionModeChange(m)}
           onSendPrompt={(t) => void handleSend(t)}
+          pendingPrompts={pendingPrompts.pending}
           promptQueue={promptQueue}
           onResolvePermission={(item, opt, comments, payload) =>
             void handleResolvePermission(item, opt, comments, payload)

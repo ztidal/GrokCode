@@ -628,11 +628,9 @@ impl AgentManager {
             return;
         }
 
-        let method = msg
-            .get("method")
-            .and_then(|m| m.as_str())
-            .unwrap_or("")
-            .to_string();
+        let method =
+            Self::canonical_method(msg.get("method").and_then(|m| m.as_str()).unwrap_or(""))
+                .to_string();
         let has_id = msg.get("id").is_some();
         let is_response_shape = msg.get("result").is_some() || msg.get("error").is_some();
 
@@ -668,7 +666,7 @@ impl AgentManager {
         }
 
         // Non-blocking agent startup: catalog may arrive after ready via
-        // `x.ai/models/update` (or `_x.ai/models/update` on some transports).
+        // `x.ai/models/update`, already canonical by here.
         if models::is_models_update_method(&method) {
             Self::apply_models_update_notification(inner, handle_id, &params);
         }
@@ -692,6 +690,26 @@ impl AgentManager {
             );
         } else if !method.is_empty() {
             Self::emit(inner, "agent-notification", payload);
+        }
+    }
+
+    /// The name every consumer uses for one of grok's private extensions.
+    ///
+    /// grok puts them on the wire with a leading underscore — `_x.ai/queue/changed`
+    /// — while its own documentation, this codebase and its tests all name them
+    /// without one. A comparison against the bare name therefore never matches,
+    /// and it fails silently: nothing errors, the notification is simply never
+    /// acted on. That is what kept the prompt queue invisible for its whole life.
+    ///
+    /// The reverse-RPC path never had this problem because `find_handler` matches
+    /// on a `/` suffix. Two notification consumers had already been patched one at
+    /// a time — `session/update` by suffix, `models/update` by stripping — before
+    /// the pattern was recognised. Doing it here means the next consumer added
+    /// cannot inherit the bug.
+    fn canonical_method(method: &str) -> &str {
+        match method.strip_prefix('_') {
+            Some(rest) if rest.starts_with("x.ai/") => rest,
+            _ => method,
         }
     }
 
@@ -1660,6 +1678,42 @@ impl AgentManager {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn private_extensions_are_named_the_way_consumers_spell_them() {
+        // grok puts these on the wire underscored; every comparison in this
+        // codebase — Rust and TypeScript alike — is written without it.
+        assert_eq!(
+            super::AgentManager::canonical_method("_x.ai/queue/changed"),
+            "x.ai/queue/changed"
+        );
+        assert_eq!(
+            super::AgentManager::canonical_method("_x.ai/session/prompt_complete"),
+            "x.ai/session/prompt_complete"
+        );
+    }
+
+    #[test]
+    fn a_name_that_is_already_canonical_is_untouched() {
+        assert_eq!(
+            super::AgentManager::canonical_method("x.ai/queue/changed"),
+            "x.ai/queue/changed"
+        );
+        assert_eq!(
+            super::AgentManager::canonical_method("session/update"),
+            "session/update"
+        );
+    }
+
+    #[test]
+    fn our_own_underscored_markers_keep_their_underscore() {
+        // `_pinkcode/transport_closed` is injected by this process, not grok;
+        // stripping it would make an internal signal look like an ACP method.
+        assert_eq!(
+            super::AgentManager::canonical_method("_pinkcode/transport_closed"),
+            "_pinkcode/transport_closed"
+        );
+    }
     use super::{finish_prompt, finish_prompt_status, terminal_prompt_id, ManagedStatus};
     use serde_json::json;
     use std::collections::HashSet;

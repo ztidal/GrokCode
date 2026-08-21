@@ -502,6 +502,15 @@ export interface TimelineItem {
   subagent?: TimelineSubagentPayload;
   /** Present when kind is `"task"`. */
   task?: TimelineBgTaskPayload;
+  /**
+   * Set on the synthetic rows standing in for a prompt that has been submitted
+   * but has not run. `entry` is present once grok owns it, which is what makes
+   * the row actionable.
+   */
+  pending?: {
+    state: "sending" | "queued";
+    entry?: PromptQueueEntry;
+  };
 }
 
 export interface AgentUpdateEvent {

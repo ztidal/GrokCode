@@ -26,10 +26,13 @@ import {
 } from "../utils/subagentTasks";
 import type { ResolvePermissionFn } from "../utils/permissionPayload";
 import type { PromptQueueController } from "../hooks/usePromptQueueController";
+import {
+  composeTimelineTail,
+  type PendingPrompt,
+} from "../hooks/usePendingPrompts";
 import { DiffPanel } from "./DiffPanel";
 import { PermissionGate } from "./PermissionGate";
 import { PromptBar } from "./PromptBar";
-import { PromptQueue } from "./PromptQueue";
 import { TimelinePanel } from "./TimelinePanel";
 import { TurnStatusBar } from "./TurnStatusBar";
 
@@ -51,6 +54,7 @@ interface Props {
   onSessionModeChange: (mode: SessionMode) => void;
   onSendPrompt: (text: string) => void;
   promptQueue: PromptQueueController;
+  pendingPrompts: PendingPrompt[];
   onResolvePermission: ResolvePermissionFn;
   /** Stop the live agent for this task (confirm handled by parent). */
   onStopAgent?: () => void;
@@ -90,6 +94,7 @@ export function SessionDetailView({
   onSessionModeChange,
   onSendPrompt,
   promptQueue,
+  pendingPrompts,
   onResolvePermission,
   onStopAgent,
   pinTimelineBottomSeq = 0,
@@ -102,6 +107,22 @@ export function SessionDetailView({
   reasoningEffort = null,
 }: Props) {
   const tabBodyRef = useRef<HTMLDivElement>(null);
+
+  // Composed for display only. Turn status, filters and the subagent strip keep
+  // reading the real list, so a message that has not run cannot be counted as
+  // something that happened.
+  const timelineWithPending = useMemo(
+    () =>
+      composeTimelineTail(
+        timelineItems,
+        pendingPrompts,
+        promptQueue.queue,
+        managed?.handleId ?? "",
+        detail?.card.id ?? null,
+        Date.now(),
+      ),
+    [timelineItems, pendingPrompts, promptQueue.queue, managed, detail],
+  );
 
   // Timeline pins to bottom; Diff / Raw expect top. Shared .tab-body
   // scroll container otherwise keeps Timeline scrollTop and hides content.
@@ -233,7 +254,8 @@ export function SessionDetailView({
       >
         {tab === "timeline" && (
           <TimelinePanel
-            items={timelineItems}
+            items={timelineWithPending}
+            queue={promptQueue}
             managed={managed}
             pinBottomSeq={pinTimelineBottomSeq}
             onOpenFile={onOpenFile}
@@ -253,7 +275,6 @@ export function SessionDetailView({
         {tab === "raw" && <RawStream detail={detail} />}
       </div>
 
-      <PromptQueue controller={promptQueue} />
       <TurnStatusBar
         managed={managed}
         timelineItems={timelineItems}

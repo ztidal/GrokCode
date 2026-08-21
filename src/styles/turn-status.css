@@ -11,7 +11,7 @@
   gap: 12px;
   flex-shrink: 0;
   min-height: 30px;
-  /* Align with `.prompt-composer` / `.prompt-queue` max width */
+  /* Align with `.prompt-composer` max width */
   width: calc(100% - 2 * var(--composer-inline-pad));
   max-width: var(--composer-max);
   margin-left: auto;

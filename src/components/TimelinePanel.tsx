@@ -1,4 +1,5 @@
 import {
+  Fragment,
   memo,
   useCallback,
   useEffect,
@@ -24,6 +25,8 @@ import { FilePathLink } from "./FilePathLink";
 import { Markdown } from "./Markdown";
 import { ShellCard } from "./ShellPanel";
 import { TimelineRowChrome, timelineStackClass } from "./TimelineRow";
+import { PendingRow } from "./PendingRow";
+import type { PromptQueueController } from "../hooks/usePromptQueueController";
 
 const TIMELINE_FILTER_LABELS: Record<string, string> = {
   all: "All",
@@ -104,6 +107,7 @@ export function TimelinePanel({
   hasMore,
   loadingOlder,
   onLoadOlder,
+  queue,
 }: {
   items: TimelineItem[];
   managed: ManagedAgentInfo | null;
@@ -112,6 +116,8 @@ export function TimelinePanel({
   hasMore: boolean;
   loadingOlder: boolean;
   onLoadOlder: () => Promise<void>;
+  /** Present so a submitted-but-not-run row can be edited, moved or run now. */
+  queue?: PromptQueueController;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -404,15 +410,21 @@ export function TimelinePanel({
                 item.kind,
                 items[sourceIndex + 1]?.kind,
               );
+              const row = item.pending ? (
+                <PendingRow
+                  item={item}
+                  stackClass={stackClass}
+                  controller={queue}
+                />
+              ) : (
+                <LiveItemRow
+                  item={item}
+                  stackClass={stackClass}
+                  onOpenFile={onOpenFile}
+                />
+              );
               if (!virtual.active) {
-                return (
-                  <LiveItemRow
-                    key={item.id}
-                    item={item}
-                    stackClass={stackClass}
-                    onOpenFile={onOpenFile}
-                  />
-                );
+                return <Fragment key={item.id}>{row}</Fragment>;
               }
               return (
                 <div
@@ -420,11 +432,7 @@ export function TimelinePanel({
                   className="tl-row-measure"
                   ref={(el) => virtual.measureKey(item.id, el)}
                 >
-                  <LiveItemRow
-                    item={item}
-                    stackClass={stackClass}
-                    onOpenFile={onOpenFile}
-                  />
+                  {row}
                 </div>
               );
             })}
