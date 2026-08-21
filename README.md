@@ -182,8 +182,8 @@ git fetch upstream && git merge upstream/main
 ```
 
 Conflicts should be confined to version bumps. If a merge wants to change `config.rs`,
-`plan_file_policy.rs`, `task_prefs.rs` or `auth.rs`, read the ADRs first — those files carry the hardening,
-and upstream has historically not touched them.
+`plan_file_policy.rs`, `task_prefs.rs`, `auth.rs` or `watcher.rs`, read the ADRs first — those files carry
+the hardening, and upstream has historically not touched them.
 
 **Env (optional)**
 

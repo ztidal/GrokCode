@@ -153,6 +153,21 @@ fn classify_path(
     if !path.starts_with(sessions_root) {
         return None;
     }
+    // Anything behind a dot-directory belongs to a tool, not to a session: the
+    // trash `session_trash` writes lives at `<sessions>/.trash`. The filter
+    // above only sees the last component, and every walk in `sessions.rs` skips
+    // these at any depth — so this one has to as well, or a touch inside the
+    // trash would refresh a card whose session is no longer there.
+    if path
+        .strip_prefix(sessions_root)
+        .map(|rest| {
+            rest.components()
+                .any(|c| c.as_os_str().to_string_lossy().starts_with('.'))
+        })
+        .unwrap_or(false)
+    {
+        return None;
+    }
     if name.starts_with("session_search.sqlite") {
         return None;
     }
@@ -166,8 +181,28 @@ fn classify_path(
         "updates.jsonl" | "events.jsonl" => Some(("timeline", session_id)),
         "hunk_records.jsonl" => Some(("hunks", session_id)),
         "plan.md" => Some(("plan", session_id)),
+        // A session's own directory appearing or going away. There is no file in
+        // the event to recognise it by, and for a removal nothing is left to
+        // stat, so it is recognised by shape alone.
+        //
+        // Reported without an id on purpose: given an id the frontend asks the
+        // host for that one card, and a card whose session has just been deleted
+        // cannot be fetched — the request fails and the stale card stays. No id
+        // means "re-read the list", the only answer that is right for a session
+        // that is gone. A newly created directory takes the same path and costs
+        // one extra list read, which the debounce absorbs.
+        _ if is_session_dir(path, sessions_root) => Some(("index", None)),
         _ => None,
     }
+}
+
+/// `<sessions>/<group>/<id>`: exactly two components below the store, which is
+/// where a session's own directory sits. Shape only — the path may already be
+/// gone by the time this is asked.
+fn is_session_dir(path: &Path, sessions_root: &Path) -> bool {
+    path.strip_prefix(sessions_root)
+        .map(|rest| rest.components().count() == 2)
+        .unwrap_or(false)
 }
 
 fn now_ms() -> u64 {
@@ -208,6 +243,61 @@ mod tests {
         assert_eq!(
             classify_path(&session.join("session_search.sqlite-wal"), home, &root),
             None
+        );
+    }
+
+    fn store() -> (&'static Path, PathBuf) {
+        let home = Path::new(r"C:\Users\test\.grok");
+        (home, home.join("sessions"))
+    }
+
+    #[test]
+    fn a_session_directory_itself_asks_for_a_whole_list() {
+        let (home, root) = store();
+        // Deleting renames this directory; the event carries no file to go on.
+        assert_eq!(
+            classify_path(&root.join("workspace").join("session-1"), home, &root),
+            Some(("index", None)),
+            "no id, so the frontend re-reads instead of asking after one card"
+        );
+    }
+
+    #[test]
+    fn the_store_and_its_project_folders_are_not_sessions() {
+        let (home, root) = store();
+        assert_eq!(classify_path(&root, home, &root), None);
+        assert_eq!(classify_path(&root.join("workspace"), home, &root), None);
+    }
+
+    #[test]
+    fn nothing_in_the_trash_is_reported_at_any_depth() {
+        let (home, root) = store();
+        let trashed = root.join(".trash").join("workspace").join("session-1");
+        // The dot is an ancestor here, not the last component, which is the case
+        // the original filter could not see.
+        assert_eq!(classify_path(&trashed, home, &root), None);
+        assert_eq!(
+            classify_path(&trashed.join("summary.json"), home, &root),
+            None
+        );
+        assert_eq!(
+            classify_path(&trashed.join("updates.jsonl"), home, &root),
+            None
+        );
+    }
+
+    #[test]
+    fn a_file_inside_a_session_still_names_its_session() {
+        let (home, root) = store();
+        let session = root.join("workspace").join("session-1");
+        // The new arm must not shadow the ones that carry an id.
+        assert_eq!(
+            classify_path(&session.join("summary.json"), home, &root),
+            Some(("index", Some("session-1".into())))
+        );
+        assert_eq!(
+            classify_path(&session.join("plan.md"), home, &root),
+            Some(("plan", Some("session-1".into())))
         );
     }
 }

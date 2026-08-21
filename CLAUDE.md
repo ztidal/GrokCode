@@ -34,8 +34,10 @@ git fetch upstream && git merge upstream/main
 ```
 
 Conflicts should be confined to version bumps in `package.json` / `Cargo.toml` / `tauri.conf.json`. If a
-merge wants to change `config.rs`, `plan_file_policy.rs`, `task_prefs.rs` or `auth.rs`, read the ADRs first
-— those files carry the hardening and upstream has historically not touched them.
+merge wants to change `config.rs`, `plan_file_policy.rs`, `task_prefs.rs`, `auth.rs` or `watcher.rs`,
+read the ADRs first — those files carry the hardening and upstream has historically not touched them.
+`watcher.rs` is the newest of them: it learned to report a session directory going away, which is what
+lets a deleted task leave the list.
 
 ## Agent skills
 
