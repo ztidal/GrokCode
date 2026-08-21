@@ -65,10 +65,28 @@ export function isNearTimelineBottom(m: VirtualScrollMetrics): boolean {
   return m.scrollHeight - m.scrollTop - m.clientHeight < 64;
 }
 
+/**
+ * Actually at the bottom, as opposed to near it.
+ *
+ * Landing here is what gives a reader their pin back, so it has to mean the
+ * bottom and not "close enough" — 2px for a fractional device pixel ratio, and
+ * nothing more.
+ */
+export function isAtTimelineBottom(m: VirtualScrollMetrics): boolean {
+  return m.scrollHeight - m.scrollTop - m.clientHeight <= 2;
+}
+
 /** The geometry a previous report left behind. */
 export interface StreamGeometry {
   scrollTop: number;
   scrollHeight: number;
+}
+
+/** Where the view is, and whether the reader put it there. */
+export interface StickState {
+  pinned: boolean;
+  /** The reader left the bottom on purpose and has not come back. */
+  escaped: boolean;
 }
 
 /**
@@ -81,8 +99,14 @@ export interface StreamGeometry {
  * timeline the instant its own output arrives, and nothing pins it again,
  * because the pin is what does the pinning.
  *
- * So only a view that actually moved up may unpin. Growth under a pinned view
- * is something to follow, not a decision to respect.
+ * Two flags rather than one, because position and intent are different facts
+ * and conflating them had a cost: with a single pin re-derived from geometry,
+ * scrolling up a little to re-read the last sentence left the view inside the
+ * near-bottom band, so it counted as still pinned and the next chunk pulled the
+ * reader back down. Re-reading the thing you just watched arrive was not
+ * possible. Now any deliberate move up latches `escaped`, the near-bottom band
+ * can keep an unescaped pin alive but can never clear an escape, and only
+ * landing on the bottom — or asking to go there — gives the pin back.
  *
  * Exported for unit tests: this repository has no DOM to drive, and the rule is
  * worth more than the wiring around it.
@@ -90,14 +114,19 @@ export interface StreamGeometry {
 export function readStickIntent(
   m: VirtualScrollMetrics,
   previous: StreamGeometry,
-  pinned: boolean,
-): { pinned: boolean; follow: boolean } {
+  state: StickState,
+): StickState & { follow: boolean } {
+  const grew = m.scrollHeight > previous.scrollHeight;
   // 1px, because a fractional scroll position is not a decision.
   const movedUp = m.scrollTop < previous.scrollTop - 1;
-  const grew = m.scrollHeight > previous.scrollHeight;
-  const nearBottom = isNearTimelineBottom(m);
-  const next = movedUp || nearBottom ? nearBottom : pinned;
-  return { pinned: next, follow: grew && next };
+  // Only under a height that did not change. Content settling shorter clamps
+  // scrollTop down and is indistinguishable from a reader scrolling up.
+  const settled = m.scrollHeight === previous.scrollHeight;
+  const atBottom = isAtTimelineBottom(m);
+
+  const escaped = atBottom ? false : state.escaped || (movedUp && settled);
+  const pinned = !escaped && (isNearTimelineBottom(m) || state.pinned);
+  return { pinned, escaped, follow: grew && pinned };
 }
 
 export function TimelinePanel({
@@ -126,6 +155,8 @@ export function TimelinePanel({
   const rootRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
+  /** Set when the reader leaves the bottom deliberately; see `readStickIntent`. */
+  const escaped = useRef(false);
   const scrollParentRef = useRef<HTMLElement | null>(null);
   const [scrollParent, setScrollParent] = useState<HTMLElement | null>(null);
   const filterBarRef = useRef<HTMLDivElement>(null);
@@ -216,8 +247,20 @@ export function TimelinePanel({
    * of the truth, and unrecoverably: the next metrics report found the ref
    * already equal to its own conclusion and skipped the mirror.
    */
+  const applyStick = useCallback((next: StickState) => {
+    stickToBottom.current = next.pinned;
+    escaped.current = next.escaped;
+    setAtBottom(next.pinned);
+  }, []);
+
+  /**
+   * An explicit answer to "should this follow the stream", from a reader who
+   * asked — sending, jumping to latest, or paging backwards. Those settle the
+   * intent too, which is why they can hand a pin back that a scroll cannot.
+   */
   const setStick = useCallback((next: boolean) => {
     stickToBottom.current = next;
+    escaped.current = !next;
     setAtBottom(next);
   }, []);
 
@@ -273,12 +316,12 @@ export function TimelinePanel({
     const intent = readStickIntent(
       m,
       { scrollTop: lastScrollTop.current, scrollHeight: lastScrollHeight.current },
-      stickToBottom.current,
+      { pinned: stickToBottom.current, escaped: escaped.current },
     );
     lastScrollTop.current = m.scrollTop;
     lastScrollHeight.current = m.scrollHeight;
 
-    setStick(intent.pinned);
+    applyStick(intent);
 
     // The report that says the content got taller is also where following it
     // belongs; a second observer for the same event would only race this one.
@@ -291,7 +334,7 @@ export function TimelinePanel({
         `${m.scrollTop - m.listTop}px`,
       );
     }
-  }, [setStick, scrollToEnd]);
+  }, [applyStick, scrollToEnd]);
 
   const virtual = useVirtualWindow(itemKeys, rootRef, scrollParent, {
     onScrollMetrics,
@@ -334,6 +377,53 @@ export function TimelinePanel({
     scrollParentRef.current = parent;
     setScrollParent(parent);
   }, [filtered.length > 0, filterChips.length]);
+
+  /*
+   * Where the intent comes from.
+   *
+   * Geometry cannot tell a reader scrolling back from the content settling
+   * shorter underneath them — both move `scrollTop` down by the same amount —
+   * and the report that says so arrives after the fact either way. A wheel or a
+   * dragging finger is the reader, unambiguously and at the moment it happens.
+   *
+   * Passive, because none of this cancels anything; and only while there is
+   * somewhere to scroll, so a flick on a short list is not read as leaving.
+   */
+  useEffect(() => {
+    const parent = scrollParent;
+    if (!parent) return;
+
+    const leaveBottom = () => {
+      if (parent.scrollHeight <= parent.clientHeight) return;
+      if (escaped.current && !stickToBottom.current) return;
+      escaped.current = true;
+      stickToBottom.current = false;
+      setAtBottom(false);
+    };
+
+    const onWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0) leaveBottom();
+    };
+    let lastTouchY = 0;
+    const onTouchStart = (event: TouchEvent) => {
+      lastTouchY = event.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      const y = event.touches[0]?.clientY ?? 0;
+      // A finger travelling down drags the content down, which is backwards.
+      if (y > lastTouchY + 1) leaveBottom();
+      lastTouchY = y;
+    };
+
+    parent.addEventListener("wheel", onWheel, { passive: true });
+    parent.addEventListener("touchstart", onTouchStart, { passive: true });
+    parent.addEventListener("touchmove", onTouchMove, { passive: true });
+    return () => {
+      parent.removeEventListener("wheel", onWheel);
+      parent.removeEventListener("touchstart", onTouchStart);
+      parent.removeEventListener("touchmove", onTouchMove);
+    };
+  }, [scrollParent]);
 
   useEffect(() => {
     if (!stickToBottom.current) return;

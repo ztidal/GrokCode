@@ -46,67 +46,99 @@ describe("readStickIntent", () => {
   });
   /** Pinned at the tail of a 2000px stream in a 600px viewport. */
   const pinnedAtBottom = { scrollTop: 1400, scrollHeight: 2000 };
+  const following = { pinned: true, escaped: false };
+  const reading = { pinned: false, escaped: true };
 
   it("follows the stream when the content grows under a pinned view", () => {
     // The bug this exists for: a reply being written into makes the tail 400px
     // away without anyone touching the scrollbar. Reading that as intent unpins
     // the timeline the moment its own output arrives.
-    const grown = at(1400, 2400);
-    expect(readStickIntent(grown, pinnedAtBottom, true)).toEqual({
+    expect(readStickIntent(at(1400, 2400), pinnedAtBottom, following)).toEqual({
       pinned: true,
+      escaped: false,
       follow: true,
     });
   });
 
   it("keeps following through several chunks in a row", () => {
     let previous = pinnedAtBottom;
-    let pinned = true;
+    let state = following;
     for (const height of [2400, 2800, 3300]) {
       const m = at(previous.scrollTop, height);
-      const intent = readStickIntent(m, previous, pinned);
-      expect(intent).toEqual({ pinned: true, follow: true });
-      pinned = intent.pinned;
+      const intent = readStickIntent(m, previous, state);
+      expect(intent).toEqual({ pinned: true, escaped: false, follow: true });
+      state = { pinned: intent.pinned, escaped: intent.escaped };
       previous = { scrollTop: m.scrollTop, scrollHeight: height };
     }
   });
 
-  it("lets go when the view actually moves up", () => {
-    // 1400 → 900 is someone dragging the scrollbar, not content arriving.
-    expect(readStickIntent(at(900), pinnedAtBottom, true)).toEqual({
+  it("lets a reader scroll back a little without dragging them down again", () => {
+    // The reason for two flags. 30px up is inside the 64px near-bottom band, so
+    // a single geometry-derived pin called this "still at the bottom" and the
+    // next chunk yanked the view back — re-reading the sentence you just
+    // watched arrive was not possible.
+    const nudgedUp = at(1370);
+    const intent = readStickIntent(nudgedUp, pinnedAtBottom, following);
+    expect(intent).toEqual({ pinned: false, escaped: true, follow: false });
+
+    // …and the next chunk must leave them where they are.
+    const grown = at(1370, 2400);
+    expect(
+      readStickIntent(grown, { scrollTop: 1370, scrollHeight: 2000 }, intent).follow,
+    ).toBe(false);
+  });
+
+  it("lets go when the view moves up a long way", () => {
+    expect(readStickIntent(at(900), pinnedAtBottom, following)).toEqual({
       pinned: false,
+      escaped: true,
       follow: false,
     });
   });
 
-  it("takes the pin back when the view returns to the bottom", () => {
+  it("keeps the reader out of the stream while they are away", () => {
+    // Reading up through history while output arrives: the view stays put, and
+    // arriving near the bottom is not the same as choosing to be there.
     const away = { scrollTop: 900, scrollHeight: 2000 };
-    expect(readStickIntent(at(1400), away, false)).toEqual({
+    expect(readStickIntent(at(900, 2400), away, reading)).toEqual({
+      pinned: false,
+      escaped: true,
+      follow: false,
+    });
+  });
+
+  it("gives the pin back only at the bottom itself", () => {
+    const away = { scrollTop: 900, scrollHeight: 2000 };
+    // Near the bottom, still escaped.
+    expect(readStickIntent(at(1360), away, reading).pinned).toBe(false);
+    // On it, released.
+    expect(readStickIntent(at(1400), away, reading)).toEqual({
       pinned: true,
-      follow: false,
-    });
-  });
-
-  it("does not follow a stream nobody is pinned to", () => {
-    // Reading up through history while output arrives: the view stays put.
-    const away = { scrollTop: 900, scrollHeight: 2000 };
-    expect(readStickIntent(at(900, 2400), away, false)).toEqual({
-      pinned: false,
+      escaped: false,
       follow: false,
     });
   });
 
   it("ignores a sub-pixel scroll position, which is not a decision", () => {
-    const jittered = at(1399.5);
-    expect(readStickIntent(jittered, pinnedAtBottom, true).pinned).toBe(true);
+    expect(readStickIntent(at(1399.5), pinnedAtBottom, following).pinned).toBe(
+      true,
+    );
   });
 
   it("stays pinned when the content shrinks under it", () => {
-    // A tool card collapsing: the browser clamps scrollTop, which is not the
-    // user asking for anything.
-    const shrunk = at(1000, 1600);
-    expect(readStickIntent(shrunk, pinnedAtBottom, true)).toEqual({
+    // A tool card collapsing, or a queued row leaving: the browser clamps
+    // scrollTop, which is not the user asking for anything. Indistinguishable
+    // from a scroll by position alone, which is why height has to agree.
+    expect(readStickIntent(at(1000, 1600), pinnedAtBottom, following)).toEqual({
       pinned: true,
+      escaped: false,
       follow: false,
     });
+  });
+
+  it("does not read a shrink part-way up as the reader leaving", () => {
+    const midStream = { scrollTop: 1200, scrollHeight: 2000 };
+    const shrunk = at(900, 1700);
+    expect(readStickIntent(shrunk, midStream, following).escaped).toBe(false);
   });
 });
