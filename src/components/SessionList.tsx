@@ -267,6 +267,12 @@ export function SessionList({
             <PinGlyph filled />
           </span>
         )}
+        {/*
+          The row's own mark. It carries what the card chrome used to say in
+          border and fill, now that rows are flat: hollow when nothing is
+          running, filled in the state's colour when something is.
+        */}
+        <span className="session-mark" aria-hidden />
         <button
           type="button"
           className="session-menu-button"
