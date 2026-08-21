@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 import type { ManagedStatus, SessionCard } from "../types";
 import {
   contextPct,
@@ -15,6 +15,8 @@ import {
 } from "../utils/managedChrome";
 import { NO_SESSIONS, useProjectGroups } from "../hooks/useProjectGroups";
 import { sortPinnedFirst, useSessionPins } from "../hooks/useSessionPins";
+import { useSessionTitles } from "../hooks/useSessionTitles";
+import { applyOverflowTitle, cardTitleTooltip } from "../utils/overflowTitle";
 import { ProjectGroupList } from "./ProjectGroupList";
 
 /**
@@ -32,6 +34,21 @@ function PinGlyph({ filled }: { filled: boolean }) {
         strokeLinejoin="round"
       />
       {!filled && <circle cx="6" cy="4.6" r="1.15" fill="currentColor" />}
+    </svg>
+  );
+}
+
+/** Pencil. Sits beside the pin, revealed with it on hover. */
+function RenameGlyph() {
+  return (
+    <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden focusable="false">
+      <path
+        d="M8.1 1.7a1.1 1.1 0 0 1 1.6 0l.6.6a1.1 1.1 0 0 1 0 1.6l-5 5-2.5.6.6-2.5 4.7-5.3Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -76,12 +93,21 @@ export function SessionList({
   onLoadMore,
 }: Props) {
   const { pinnedIds, isPinned, togglePinned } = useSessionPins();
+  const { displayTitle, originalTitle, rename } = useSessionTitles();
+
+  /** The card whose name is being edited, if any. One at a time. */
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  /** Escape unmounts the input, which also blurs it; blur must not then save. */
+  const abandonRename = useRef(false);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = q
       ? sessions.filter(
           (s) =>
+            // Both names: searching for what you called it has to work, and so
+            // does searching for what it was called before you renamed it.
+            displayTitle(s).toLowerCase().includes(q) ||
             s.title.toLowerCase().includes(q) ||
             s.cwd.toLowerCase().includes(q) ||
             s.id.toLowerCase().includes(q) ||
@@ -104,7 +130,14 @@ export function SessionList({
       );
       return ar - br;
     });
-  }, [sessions, query, managedStatuses, needsInputSessionIds, pinnedIds]);
+  }, [
+    sessions,
+    query,
+    managedStatuses,
+    needsInputSessionIds,
+    pinnedIds,
+    displayTitle,
+  ]);
 
   const searching = query.trim().length > 0;
   // A search already spans every project, so grouping its hits would only nest
@@ -124,6 +157,9 @@ export function SessionList({
     const state = resolveCardState(managedStatus, openElsewhere, needsInput);
     const pid = managedPids?.[s.id] ?? s.activePid ?? null;
     const pinned = isPinned(s.id);
+    const name = displayTitle(s);
+    const original = originalTitle(s);
+    const editing = renamingId === s.id;
     const cardClass = [
       "session-card",
       selectedId === s.id ? "selected" : "",
@@ -154,10 +190,8 @@ export function SessionList({
           type="button"
           className="session-pin"
           aria-pressed={pinned}
-          title={pinned ? "Unpin from the top" : "Pin to the top"}
-          aria-label={
-            pinned ? `Unpin ${s.title}` : `Pin ${s.title} to the top`
-          }
+          title={pinned ? "Unpin" : "Pin to the top of the list"}
+          aria-label={pinned ? `Unpin ${name}` : `Pin ${name} to the top`}
           onClick={(e) => {
             // The card behind this button opens the session on click.
             e.stopPropagation();
@@ -165,6 +199,19 @@ export function SessionList({
           }}
         >
           <PinGlyph filled={pinned} />
+        </button>
+        <button
+          type="button"
+          className="session-rename"
+          title="Rename"
+          aria-label={`Rename ${name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            abandonRename.current = false;
+            setRenamingId(s.id);
+          }}
+        >
+          <RenameGlyph />
         </button>
         {state !== "idle" && (
           <div className="card-status">
@@ -178,9 +225,57 @@ export function SessionList({
           </div>
         )}
         <div className="card-body">
-          <div className="card-title" title={s.title}>
-            {s.title}
-          </div>
+          {editing ? (
+            <input
+              className="card-title-input"
+              defaultValue={name}
+              placeholder={s.title}
+              autoFocus
+              spellCheck={false}
+              title="Enter to save · Esc to cancel · leave it empty to restore the agent's own title"
+              // Everything here happens on a card that opens on click.
+              onClick={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
+              onFocus={(e) => e.currentTarget.select()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  rename(s, e.currentTarget.value);
+                  setRenamingId(null);
+                } else if (e.key === "Escape") {
+                  abandonRename.current = true;
+                  setRenamingId(null);
+                }
+              }}
+              onBlur={(e) => {
+                // Escape already unmounted the input, and unmounting blurs it.
+                if (abandonRename.current) {
+                  abandonRename.current = false;
+                  return;
+                }
+                rename(s, e.target.value);
+                setRenamingId(null);
+              }}
+            />
+          ) : (
+            <div
+              className={original ? "card-title renamed" : "card-title"}
+              // Measured on arrival, not watched: see applyOverflowTitle.
+              onMouseEnter={(e) =>
+                applyOverflowTitle(
+                  e.currentTarget,
+                  cardTitleTooltip(name, original),
+                  original != null,
+                )
+              }
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                abandonRename.current = false;
+                setRenamingId(s.id);
+              }}
+            >
+              {name}
+            </div>
+          )}
           <div className="card-meta">
             <span title={s.cwd}>{projectName(s.cwd)}</span>
             {s.headBranch && <span className="branch">⎇ {s.headBranch}</span>}

@@ -702,6 +702,26 @@
   color: var(--text);
 }
 
+/*
+ * The pinned header carries no controls, so it takes the padding the toggle
+ * button would have supplied and drops the hover response — nothing here reacts
+ * to a pointer, and a header that lights up under one is promising a click it
+ * does not have. The accent is what says these cards were chosen by hand.
+ */
+.project-group-header.is-pinned {
+  padding: 4px 8px 4px 6px;
+  color: var(--accent);
+}
+
+.project-group-header.is-pinned:hover {
+  background: color-mix(in srgb, var(--rp-base) 88%, transparent);
+  color: var(--accent);
+}
+
+.project-group-header.is-pinned .project-group-label {
+  font-weight: 600;
+}
+
 .project-group-toggle {
   display: flex;
   align-items: center;
@@ -1021,6 +1041,51 @@
   color: var(--accent);
 }
 
+/*
+ * Rename sits inboard of the pin and, unlike it, has no state to report — so it
+ * stays out of the resting card entirely and appears only under the pointer or
+ * the focus ring. The pin has to be legible at rest because "is this pinned?"
+ * is a question the card answers; "can this be renamed?" is not.
+ */
+.session-rename {
+  position: absolute;
+  top: 2px;
+  right: 23px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.session-card:hover .session-rename {
+  opacity: 0.55;
+}
+
+.session-rename:hover {
+  opacity: 1;
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.session-rename:focus-visible {
+  opacity: 1;
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .session-cards .session-card::before,
   .session-cards .session-card .card-status-dot {
@@ -1034,6 +1099,7 @@
   }
 
   .session-pin,
+  .session-rename,
   .project-group-new {
     transition: none;
   }

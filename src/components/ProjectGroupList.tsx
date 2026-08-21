@@ -30,6 +30,31 @@ export function ProjectGroupList({
   return (
     <>
       {groups.map((group) => {
+        /*
+         * The pinned group is a header and nothing else: no caret, because a pin
+         * behind a closed header is a pin you cannot see; no "+", because there
+         * is no folder to start a task in. It renders only while something is
+         * pinned, so the sidebar is unchanged for anyone who never pins.
+         */
+        if (group.pinned) {
+          return (
+            <div className="project-group is-pinned" key={group.key}>
+              <div className="project-group-header is-pinned">
+                <span className="project-group-label">{group.label}</span>
+                <span
+                  className="project-group-count"
+                  title={groupCountTitle(group)}
+                >
+                  {groupCountLabel(group)}
+                </span>
+              </div>
+              <div className="project-group-sessions">
+                {group.sessions.map((session) => renderSession(session))}
+              </div>
+            </div>
+          );
+        }
+
         const collapsed = isCollapsed(group.key);
         const holdsSelected =
           selectedId != null &&

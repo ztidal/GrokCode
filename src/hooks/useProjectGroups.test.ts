@@ -9,7 +9,7 @@ import {
   parseStoredCollapsed,
   serializeCollapsed,
   type SessionGroup,
-  groupsHoldingPins,
+  PINNED_GROUP_KEY,
 } from "./useProjectGroups";
 
 function card(
@@ -190,6 +190,7 @@ describe("group count chrome", () => {
       label: "k",
       path: "D:\\k",
       sessions: Array.from({ length: loaded }, (_, i) => card(String(i), "D:\\k")),
+      loadedCount: loaded,
       totalCount: total,
       missing: false,
       activityMs: 0,
@@ -234,63 +235,65 @@ describe("collapse persistence", () => {
   });
 });
 
-describe("groupsHoldingPins", () => {
-  const group = (key: string, ids: string[]): SessionGroup => ({
-    key,
-    label: key,
-    path: key,
-    sessions: ids.map((id) => ({ id }) as SessionGroup["sessions"][number]),
-    totalCount: ids.length,
-    missing: false,
-    activityMs: 0,
-  });
-
-  it("returns nothing when nothing is pinned", () => {
-    expect(groupsHoldingPins([group("a", ["1"])], new Set())).toEqual([]);
-  });
-
-  it("names only the groups that hold a pin", () => {
-    const groups = [group("a", ["1", "2"]), group("b", ["3"]), group("c", [])];
-    expect(groupsHoldingPins(groups, new Set(["3"]))).toEqual(["b"]);
-  });
-
-  it("names every holder when pins span projects", () => {
-    const groups = [group("a", ["1"]), group("b", ["2"]), group("c", ["3"])];
-    expect(groupsHoldingPins(groups, new Set(["1", "3"]))).toEqual(["a", "c"]);
-  });
-
-  it("ignores pins whose session is not on the loaded page", () => {
-    expect(groupsHoldingPins([group("a", ["1"])], new Set(["missing"]))).toEqual(
-      [],
-    );
-  });
-});
-
-describe("pinned projects sort to the top", () => {
+describe("the pinned group", () => {
   const card = (id: string, cwd: string, updatedAt: string): SessionCard =>
     ({ id, cwd, title: id, updatedAt, numMessages: 1 }) as SessionCard;
 
-  it("lifts a stale project above a busier one when it holds a pin", () => {
-    const cards = [
-      card("busy", "D:/proj/active", "2026-08-20T10:00:00Z"),
-      card("old", "D:/proj/dusty", "2026-01-01T00:00:00Z"),
-    ];
-    expect(groupLoadedSessions(cards, [], new Set()).map((g) => g.label)).toEqual([
-      "active",
-      "dusty",
-    ]);
-    expect(
-      groupLoadedSessions(cards, [], new Set(["old"])).map((g) => g.label),
-    ).toEqual(["dusty", "active"]);
+  const cards = [
+    card("busy", "D:/proj/active", "2026-08-20T10:00:00Z"),
+    card("old", "D:/proj/dusty", "2026-01-01T00:00:00Z"),
+  ];
+
+  it("does not exist while nothing on the page is pinned", () => {
+    const groups = groupLoadedSessions(cards, [], new Set());
+    expect(groups.map((g) => g.label)).toEqual(["active", "dusty"]);
+    expect(groups.some((g) => g.pinned)).toBe(false);
   });
 
-  it("keeps activity order among projects that all hold pins", () => {
-    const cards = [
-      card("a", "D:/proj/one", "2026-08-20T10:00:00Z"),
-      card("b", "D:/proj/two", "2026-08-19T10:00:00Z"),
+  it("ignores a pin whose session is not on the loaded page", () => {
+    const groups = groupLoadedSessions(cards, [], new Set(["elsewhere"]));
+    expect(groups.some((g) => g.pinned)).toBe(false);
+  });
+
+  it("comes first, ahead of the busiest project", () => {
+    const groups = groupLoadedSessions(cards, [], new Set(["old"]));
+    expect(groups[0].key).toBe(PINNED_GROUP_KEY);
+    expect(groups[0].label).toBe("Pinned");
+    expect(groups[0].pinned).toBe(true);
+  });
+
+  it("moves the card out of its project rather than copying it", () => {
+    const groups = groupLoadedSessions(cards, [], new Set(["busy"]));
+    expect(groups[0].sessions.map((s) => s.id)).toEqual(["busy"]);
+    // "busy" was the only card under `active`, so that header is gone entirely.
+    expect(groups.map((g) => g.label)).toEqual(["Pinned", "dusty"]);
+  });
+
+  it("leaves a project that still has something to show", () => {
+    const two = [
+      card("one", "D:/proj/active", "2026-08-20T10:00:00Z"),
+      card("two", "D:/proj/active", "2026-08-19T10:00:00Z"),
     ];
-    expect(
-      groupLoadedSessions(cards, [], new Set(["a", "b"])).map((g) => g.label),
-    ).toEqual(["one", "two"]);
+    const groups = groupLoadedSessions(two, [], new Set(["one"]));
+    expect(groups.map((g) => g.label)).toEqual(["Pinned", "active"]);
+    expect(groups[1].sessions.map((s) => s.id)).toEqual(["two"]);
+  });
+
+  it("still counts a moved card as loaded by its project", () => {
+    const two = [
+      card("one", "D:/proj/active", "2026-08-20T10:00:00Z"),
+      card("two", "D:/proj/active", "2026-08-19T10:00:00Z"),
+    ];
+    // Both cards are loaded; one is just being shown a group up. A badge of
+    // "1/2" would read as paging that is never going to finish.
+    const [, project] = groupLoadedSessions(two, [], new Set(["one"]));
+    expect(project.loadedCount).toBe(2);
+    expect(groupCountLabel(project)).toBe("2");
+  });
+
+  it("keeps the caller's order among the pinned cards", () => {
+    const groups = groupLoadedSessions(cards, [], new Set(["busy", "old"]));
+    expect(groups[0].sessions.map((s) => s.id)).toEqual(["busy", "old"]);
+    expect(groups).toHaveLength(1);
   });
 });
