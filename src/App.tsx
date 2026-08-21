@@ -17,6 +17,7 @@ import {
   setTaskPlanArmed,
   spawnAgent,
   stopAgent,
+  startupSession,
 } from "./api";
 import { MacosTitlebarBrand } from "./components/MacosTitlebarBrand";
 import { NewTaskModal } from "./components/NewTaskModal";
@@ -214,6 +215,28 @@ function App() {
    * happened to be — the top. Keyed on the card id, so a detail refresh for the
    * session already open does not yank a reader back down.
    */
+  /*
+   * A window opened from another window's card menu comes up on that task.
+   *
+   * Set as soon as the host answers, whatever the list has already chosen:
+   * `pickSelectedId` keeps the previous selection when the card is on the loaded
+   * page, so this holds from here on. A window started any other way is told
+   * nothing and picks its own, exactly as before.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    void startupSession()
+      .then((id) => {
+        if (!cancelled && id) setSelectedId(id);
+      })
+      .catch(() => {
+        // An older host without the command: the window picks its own task.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (!detail?.card.id) return;
     setPinTimelineBottomSeq((n) => n + 1);

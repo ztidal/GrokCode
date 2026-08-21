@@ -513,6 +513,30 @@ export async function listProjectGroupSessions(
  * sibling would come up without IPC. Resolves once the process has started —
  * its window paints a moment later, on its own.
  */
-export async function openNewWindow(): Promise<NewWindowInstance> {
-  return invoke<NewWindowInstance>("open_new_window");
+export async function openNewWindow(
+  session?: string,
+): Promise<NewWindowInstance> {
+  return invoke<NewWindowInstance>("open_new_window", { session });
+}
+
+/**
+ * The task this window was opened for, if another window opened it.
+ *
+ * Read once at startup. A window started from the taskbar answers `null` and
+ * chooses its own session, exactly as it did before this existed.
+ */
+export async function startupSession(): Promise<string | null> {
+  return invoke<string | null>("startup_session");
+}
+
+/**
+ * Move a session out of the sidebar and out of `grok`'s reach.
+ *
+ * Nothing is deleted: the host moves the session's directory into the store's
+ * `.trash`, and resolves with the path it landed on so the caller can say where
+ * it went. The sidebar's own walker skips that directory, so the card is gone
+ * from every window at the next scan.
+ */
+export async function trashSession(sessionId: string): Promise<string> {
+  return invoke<string>("trash_session", { sessionId });
 }

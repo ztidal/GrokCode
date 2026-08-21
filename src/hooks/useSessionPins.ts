@@ -1,42 +1,24 @@
-import { useCallback, useEffect, useState } from "react";
+import { useMemo } from "react";
+import {
+  parseIdSet,
+  serializeIdSet,
+  toggleId,
+  useStoredIdSet,
+} from "./useIdSet";
 
 /** Fork-owned key — upstream stores nothing under this prefix (ADR-0003). */
 const PINNED_KEY = "ztidalcode.sessions.pinned";
 
 /**
- * Decode the stored pin set: a JSON array of non-empty session ids, anything
- * else meaning "nothing pinned". A corrupt entry costs the pins and nothing
- * else — sessions on disk never learn about this.
+ * The stored-set primitives, re-exported under the names this module has always
+ * used. Pins and the archive keep one implementation between them; only what
+ * the sidebar does with membership differs.
  */
-export function parseStoredPins(raw: string | null): Set<string> {
-  if (!raw) return new Set();
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(
-      parsed.filter((id): id is string => typeof id === "string" && id !== ""),
-    );
-  } catch {
-    return new Set(); /* corrupt value — same as never having pinned anything */
-  }
-}
-
-/** Sorted so an unchanged set never rewrites the entry with a new spelling. */
-export function serializePins(ids: ReadonlySet<string>): string {
-  return JSON.stringify([...ids].sort());
-}
-
-/** Add or drop one id, always a new set so React sees the change. */
-export function togglePin(
-  pinned: ReadonlySet<string>,
-  id: string,
-): Set<string> {
-  const next = new Set(pinned);
-  // An empty id cannot survive parseStoredPins, so never let one in.
-  if (id === "") return next;
-  if (!next.delete(id)) next.add(id);
-  return next;
-}
+export {
+  parseIdSet as parseStoredPins,
+  serializeIdSet as serializePins,
+  toggleId as togglePin,
+};
 
 /**
  * Pinned items first, the rest in `compare` order.
@@ -56,27 +38,13 @@ export function sortPinnedFirst<T extends { id: string }>(
   });
 }
 
-function readStored(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null; /* storage disabled */
-  }
-}
-
-function writeStored(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    /* storage disabled — a pin is a preference, not state we must keep */
-  }
-}
-
 export interface SessionPinsApi {
   /** The whole set, for callers that sort or group by it. */
   pinnedIds: ReadonlySet<string>;
   isPinned: (id: string) => boolean;
   togglePinned: (id: string) => void;
+  /** Unpin whatever its state, for callers that are moving a card elsewhere. */
+  unpin: (id: string) => void;
 }
 
 /**
@@ -90,24 +58,16 @@ export interface SessionPinsApi {
  * Per-machine UI preference, so localStorage rather than a Rust command —
  * nothing about a pin belongs in agent state (ADR-0001: no new subsystem for
  * something a key/value entry already holds).
- *
- * Ids are never pruned against the loaded page: the sidebar pages, so a pin on
- * a session that has not been fetched yet is still a live pin.
  */
 export function useSessionPins(): SessionPinsApi {
-  const [pinnedIds, setPinnedIds] = useState<Set<string>>(() =>
-    parseStoredPins(readStored(PINNED_KEY)),
+  const { ids, has, toggle, remove } = useStoredIdSet(PINNED_KEY);
+  return useMemo(
+    () => ({
+      pinnedIds: ids,
+      isPinned: has,
+      togglePinned: toggle,
+      unpin: remove,
+    }),
+    [ids, has, toggle, remove],
   );
-
-  useEffect(() => {
-    writeStored(PINNED_KEY, serializePins(pinnedIds));
-  }, [pinnedIds]);
-
-  const isPinned = useCallback((id: string) => pinnedIds.has(id), [pinnedIds]);
-
-  const togglePinned = useCallback((id: string) => {
-    setPinnedIds((previous) => togglePin(previous, id));
-  }, []);
-
-  return { pinnedIds, isPinned, togglePinned };
 }

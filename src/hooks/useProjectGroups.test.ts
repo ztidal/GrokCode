@@ -10,6 +10,7 @@ import {
   serializeCollapsed,
   type SessionGroup,
   PINNED_GROUP_KEY,
+  ARCHIVED_GROUP_KEY,
 } from "./useProjectGroups";
 
 function card(
@@ -247,19 +248,19 @@ describe("the pinned group", () => {
   it("does not exist while nothing on the page is pinned", () => {
     const groups = groupLoadedSessions(cards, [], new Set());
     expect(groups.map((g) => g.label)).toEqual(["active", "dusty"]);
-    expect(groups.some((g) => g.pinned)).toBe(false);
+    expect(groups.some((g) => g.special)).toBeFalsy();
   });
 
   it("ignores a pin whose session is not on the loaded page", () => {
     const groups = groupLoadedSessions(cards, [], new Set(["elsewhere"]));
-    expect(groups.some((g) => g.pinned)).toBe(false);
+    expect(groups.some((g) => g.special)).toBeFalsy();
   });
 
   it("comes first, ahead of the busiest project", () => {
     const groups = groupLoadedSessions(cards, [], new Set(["old"]));
     expect(groups[0].key).toBe(PINNED_GROUP_KEY);
     expect(groups[0].label).toBe("Pinned");
-    expect(groups[0].pinned).toBe(true);
+    expect(groups[0].special).toBe("pinned");
   });
 
   it("moves the card out of its project rather than copying it", () => {
@@ -295,5 +296,67 @@ describe("the pinned group", () => {
     const groups = groupLoadedSessions(cards, [], new Set(["busy", "old"]));
     expect(groups[0].sessions.map((s) => s.id)).toEqual(["busy", "old"]);
     expect(groups).toHaveLength(1);
+  });
+});
+
+describe("the archived group", () => {
+  const card = (id: string, cwd: string, updatedAt: string): SessionCard =>
+    ({ id, cwd, title: id, updatedAt, numMessages: 1 }) as SessionCard;
+
+  const cards = [
+    card("busy", "D:/proj/active", "2026-08-20T10:00:00Z"),
+    card("old", "D:/proj/dusty", "2026-01-01T00:00:00Z"),
+  ];
+  const none = new Set<string>();
+
+  it("does not exist while nothing on the page is archived", () => {
+    const groups = groupLoadedSessions(cards, [], none, none);
+    expect(groups.map((g) => g.label)).toEqual(["active", "dusty"]);
+  });
+
+  it("comes last, below every project", () => {
+    const groups = groupLoadedSessions(cards, [], none, new Set(["busy"]));
+    const last = groups[groups.length - 1];
+    expect(last.key).toBe(ARCHIVED_GROUP_KEY);
+    expect(last.label).toBe("Archived");
+    expect(last.special).toBe("archived");
+    expect(last.sessions.map((s) => s.id)).toEqual(["busy"]);
+  });
+
+  it("brackets the projects when something is pinned too", () => {
+    const groups = groupLoadedSessions(
+      cards,
+      [],
+      new Set(["old"]),
+      new Set(["busy"]),
+    );
+    expect(groups.map((g) => g.label)).toEqual(["Pinned", "Archived"]);
+    expect(groups[0].key).toBe(PINNED_GROUP_KEY);
+    expect(groups[1].key).toBe(ARCHIVED_GROUP_KEY);
+  });
+
+  it("wins over a pin on the same card, being the later word", () => {
+    const both = new Set(["busy"]);
+    const groups = groupLoadedSessions(cards, [], both, both);
+    expect(groups.some((g) => g.key === PINNED_GROUP_KEY)).toBe(false);
+    const archived = groups.find((g) => g.key === ARCHIVED_GROUP_KEY);
+    expect(archived?.sessions.map((s) => s.id)).toEqual(["busy"]);
+  });
+
+  it("still counts an archived card as loaded by its project", () => {
+    const two = [
+      card("one", "D:/proj/active", "2026-08-20T10:00:00Z"),
+      card("two", "D:/proj/active", "2026-08-19T10:00:00Z"),
+    ];
+    const groups = groupLoadedSessions(two, [], none, new Set(["one"]));
+    const project = groups.find((g) => g.label === "active");
+    expect(project?.sessions.map((s) => s.id)).toEqual(["two"]);
+    expect(project?.loadedCount).toBe(2);
+    expect(groupCountLabel(project as SessionGroup)).toBe("2");
+  });
+
+  it("drops a project whose every loaded card is archived", () => {
+    const groups = groupLoadedSessions(cards, [], none, new Set(["busy"]));
+    expect(groups.map((g) => g.label)).toEqual(["dusty", "Archived"]);
   });
 });

@@ -32,11 +32,13 @@ export function ProjectGroupList({
       {groups.map((group) => {
         /*
          * The pinned group is a header and nothing else: no caret, because a pin
-         * behind a closed header is a pin you cannot see; no "+", because there
-         * is no folder to start a task in. It renders only while something is
-         * pinned, so the sidebar is unchanged for anyone who never pins.
+         * behind a closed header is a pin you cannot see. Archived is the same
+         * kind of built group but the opposite errand, so it keeps its caret and
+         * starts closed. Neither offers "+": there is no folder to start a task
+         * in. Both render only while they hold something, so the sidebar is
+         * unchanged for anyone who never pins or archives.
          */
-        if (group.pinned) {
+        if (group.special === "pinned") {
           return (
             <div className="project-group is-pinned" key={group.key}>
               <div className="project-group-header is-pinned">
@@ -80,9 +82,11 @@ export function ProjectGroupList({
                 onClick={() => onToggle(group.key)}
                 aria-expanded={!collapsed}
                 title={
-                  group.missing
-                    ? `${group.path}\nFolder no longer exists`
-                    : group.path
+                  group.special === "archived"
+                    ? "Archived — kept out of their projects until you unarchive them"
+                    : group.missing
+                      ? `${group.path}\nFolder no longer exists`
+                      : group.path
                 }
               >
                 <span className="project-group-caret" aria-hidden>

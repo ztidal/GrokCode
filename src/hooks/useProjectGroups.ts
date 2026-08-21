@@ -22,6 +22,13 @@ const EXPANDED_KEY = "ztidalcode.sessions.groups.expanded";
  */
 export const PINNED_GROUP_KEY = "\u0000pinned";
 
+/**
+ * Key of the synthetic group holding archived cards, below the projects. Same
+ * NUL-led spelling and the same reason as [`PINNED_GROUP_KEY`], but this one is
+ * an ordinary collapsible group, so it does keep a collapse state under its key.
+ */
+export const ARCHIVED_GROUP_KEY = "\u0000archived";
+
 /** The pre-inversion entry, which listed collapsed keys. See `loadExpanded`. */
 const LEGACY_COLLAPSED_KEY = "ztidalcode.sessions.groups.collapsed";
 
@@ -51,10 +58,11 @@ export interface SessionGroup {
   /** Sort value, epoch ms. */
   activityMs: number;
   /**
-   * The pinned group rather than a project: it has no folder, so it cannot be
-   * collapsed, started in, or reported missing.
+   * A built group rather than a project. Neither has a folder, so neither can
+   * be started in or reported missing; `pinned` additionally cannot be
+   * collapsed, because a pin behind a closed header defeats itself.
    */
-  pinned?: boolean;
+  special?: "pinned" | "archived";
 }
 
 /**
@@ -111,20 +119,27 @@ function indexGroups(groups: ProjectGroup[]): Map<string, ProjectGroup> {
  * header built from its own cwd — a card vanishing from the sidebar because two
  * scans disagreed would be worse than a header with an approximate count.
  *
- * A pinned card is **moved**, not copied: it renders once, under `Pinned`, and
- * its project header stops listing it. Pinning is how someone says "I need to
- * find this again", and with projects collapsed by default the only answer that
- * always holds is a card that is not behind a header at all. Its project still
- * counts it as loaded, so the badge does not read as paging that never finishes.
+ * A pinned or archived card is **moved**, not copied: it renders once, under its
+ * own header, and its project stops listing it. Pinning is how someone says "I
+ * need to find this again", and with projects collapsed by default the only
+ * answer that always holds is a card that is not behind a project header at all;
+ * archiving is the opposite errand and gets the same treatment at the bottom.
+ * Either way the project still counts the card as loaded, so its badge does not
+ * read as paging that never finishes.
+ *
+ * Archived wins over pinned for a card that is somehow both: someone who has
+ * archived a task has said they are done with it, which is the later word.
  */
 export function groupLoadedSessions(
   sessions: SessionCard[],
   groups: ProjectGroup[],
   pinnedIds: ReadonlySet<string> = new Set(),
+  archivedIds: ReadonlySet<string> = new Set(),
 ): SessionGroup[] {
   const index = indexGroups(groups);
   const buckets = new Map<string, SessionGroup>();
   const pinnedCards: SessionCard[] = [];
+  const archivedCards: SessionCard[] = [];
 
   for (const card of sessions) {
     const normalized = normalizeGroupKey(card.cwd);
@@ -147,7 +162,8 @@ export function groupLoadedSessions(
       buckets.set(key, bucket);
     }
     bucket.loadedCount += 1;
-    if (pinnedIds.has(card.id)) pinnedCards.push(card);
+    if (archivedIds.has(card.id)) archivedCards.push(card);
+    else if (pinnedIds.has(card.id)) pinnedCards.push(card);
     else bucket.sessions.push(card);
     if (!indexed) {
       // No index row to sort by, so the newest card on the page stands in.
@@ -161,8 +177,8 @@ export function groupLoadedSessions(
   }
 
   const projects = [...buckets.values()]
-    // A project whose every loaded card is pinned has nothing left to show, and
-    // an empty header is worse than no header — its cards are one group up.
+    // A project whose every loaded card was taken has nothing left to show, and
+    // an empty header is worse than no header — its cards are one group away.
     .filter((group) => group.sessions.length > 0)
     .sort(
       (a, b) =>
@@ -170,21 +186,51 @@ export function groupLoadedSessions(
         (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
     );
 
-  if (pinnedCards.length === 0) return projects;
+  /** A header that is built rather than indexed: no folder, no count to page. */
+  const built = (
+    key: string,
+    label: string,
+    cards: SessionCard[],
+    special: "pinned" | "archived",
+    activityMs: number,
+  ): SessionGroup => ({
+    key,
+    label,
+    path: "",
+    sessions: cards,
+    loadedCount: cards.length,
+    totalCount: cards.length,
+    missing: false,
+    activityMs,
+    special,
+  });
+
   return [
-    {
-      key: PINNED_GROUP_KEY,
-      label: "Pinned",
-      path: "",
-      sessions: pinnedCards,
-      loadedCount: pinnedCards.length,
-      totalCount: pinnedCards.length,
-      missing: false,
-      // Always first; the projects sort among themselves below it.
-      activityMs: Number.POSITIVE_INFINITY,
-      pinned: true,
-    },
+    // Infinity and -Infinity rather than a sort key: these two are not competing
+    // with the projects on recency, they bracket them.
+    ...(pinnedCards.length
+      ? [
+          built(
+            PINNED_GROUP_KEY,
+            "Pinned",
+            pinnedCards,
+            "pinned",
+            Number.POSITIVE_INFINITY,
+          ),
+        ]
+      : []),
     ...projects,
+    ...(archivedCards.length
+      ? [
+          built(
+            ARCHIVED_GROUP_KEY,
+            "Archived",
+            archivedCards,
+            "archived",
+            Number.NEGATIVE_INFINITY,
+          ),
+        ]
+      : []),
   ];
 }
 
@@ -280,6 +326,8 @@ export interface ProjectGroupsOptions {
   selectedId?: string | null;
   /** Cards to lift out of their projects and into the `Pinned` group on top. */
   pinnedIds?: ReadonlySet<string>;
+  /** Cards to move out of their projects and into `Archived` at the bottom. */
+  archivedIds?: ReadonlySet<string>;
 }
 
 export interface ProjectGroupsApi {
@@ -302,7 +350,7 @@ export function useProjectGroups(
   sessions: SessionCard[],
   options: ProjectGroupsOptions = {},
 ): ProjectGroupsApi {
-  const { selectedId = null, pinnedIds } = options;
+  const { selectedId = null, pinnedIds, archivedIds } = options;
   const [index, setIndex] = useState<ProjectGroup[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(loadExpanded);
 
@@ -327,8 +375,9 @@ export function useProjectGroups(
     writeStored(EXPANDED_KEY, serializeCollapsed(expanded));
   }, [expanded]);
 
-  // The pinned group has no folder to remember a state for, and a pin behind a
-  // closed header would defeat its own purpose — it is never collapsed.
+  // A pin behind a closed header defeats its own purpose, so the pinned group is
+  // never collapsed. Archived is the opposite errand and behaves like a project:
+  // collapsed until asked for, which is what the stored set already does.
   const isCollapsed = useCallback(
     (key: string) => key !== PINNED_GROUP_KEY && !expanded.has(key),
     [expanded],
@@ -343,8 +392,8 @@ export function useProjectGroups(
   }, []);
 
   const groups = useMemo(
-    () => groupLoadedSessions(sessions, index, pinnedIds),
-    [sessions, index, pinnedIds],
+    () => groupLoadedSessions(sessions, index, pinnedIds, archivedIds),
+    [sessions, index, pinnedIds, archivedIds],
   );
 
   /**

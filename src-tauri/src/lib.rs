@@ -19,6 +19,7 @@ mod project_groups;
 mod proxy;
 mod rpc_handler;
 mod session_noise;
+mod session_trash;
 mod session_usage;
 mod sessions;
 mod shell_emitter;
@@ -614,12 +615,38 @@ async fn git_apply_patch(cwd: String, patch: String, reverse: bool) -> Result<()
 /// every permission to the window label `main`, so an in-process sibling would
 /// paint and then fail every IPC call it made. The two processes share
 /// `~/.ztidalcode`, which `multi_instance` locks (see `task_prefs`).
+///
+/// `session` opens the new window straight onto one task; without it the window
+/// comes up wherever the sidebar would have left it.
 #[tauri::command]
-async fn open_new_window() -> Result<multi_instance::NewInstance, String> {
+async fn open_new_window(session: Option<String>) -> Result<multi_instance::NewInstance, String> {
     // Process creation is a blocking syscall — keep it off the command path.
-    tauri::async_runtime::spawn_blocking(multi_instance::launch_sibling_instance)
+    tauri::async_runtime::spawn_blocking(move || multi_instance::launch_sibling_instance(session))
         .await
         .map_err(|e| format!("new window task failed: {e}"))?
+}
+
+/// The task this window was started on, if it was opened for one.
+///
+/// Read once at startup by the frontend. A window opened from the taskbar
+/// answers `None` and picks its own session, exactly as before.
+#[tauri::command]
+fn startup_session() -> Option<String> {
+    multi_instance::startup_session()
+}
+
+/// Move a session out of the sidebar and out of `grok`'s reach, reversibly.
+///
+/// Named for what it does rather than for the menu item that calls it: nothing
+/// is deleted, the directory is moved to the store's `.trash`, and the returned
+/// path is where it can be moved back from.
+#[tauri::command]
+async fn trash_session(session_id: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        session_trash::trash_session(&session_id).map(|p| p.display().to_string())
+    })
+    .await
+    .map_err(|e| format!("trash task failed: {e}"))?
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -736,6 +763,8 @@ pub fn run() {
             project_groups::list_project_groups,
             project_groups::list_project_group_sessions,
             open_new_window,
+            startup_session,
+            trash_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -998,59 +998,16 @@
  * on hover is a control a keyboard cannot reach — so it merely dims until the
  * card is hovered, the button focused, or the task actually pinned.
  */
-.session-pin {
+/*
+ * The card's one control. It carries no state — "can this be acted on?" is not
+ * a question the card has to answer at rest — so it stays out of the resting
+ * card entirely and appears under the pointer or the focus ring. Right-clicking
+ * the card opens the same menu, for anyone who never goes looking for it.
+ */
+.session-menu-button {
   position: absolute;
   top: 2px;
   right: 3px;
-  z-index: 3;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  opacity: 0.4;
-  transition:
-    opacity 0.12s ease,
-    background-color 0.12s ease,
-    color 0.12s ease;
-}
-
-.session-card:hover .session-pin {
-  opacity: 1;
-}
-
-.session-pin:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.session-pin:focus-visible {
-  opacity: 1;
-  outline: none;
-  box-shadow: 0 0 0 1px var(--accent);
-}
-
-.session-card.pinned .session-pin {
-  opacity: 1;
-  color: var(--accent);
-}
-
-/*
- * Rename sits inboard of the pin and, unlike it, has no state to report — so it
- * stays out of the resting card entirely and appears only under the pointer or
- * the focus ring. The pin has to be legible at rest because "is this pinned?"
- * is a question the card answers; "can this be renamed?" is not.
- */
-.session-rename {
-  position: absolute;
-  top: 2px;
-  right: 23px;
   z-index: 3;
   display: inline-flex;
   align-items: center;
@@ -1070,21 +1027,113 @@
     color 0.12s ease;
 }
 
-.session-card:hover .session-rename {
-  opacity: 0.55;
+.session-card:hover .session-menu-button,
+.session-menu-button[aria-expanded="true"] {
+  opacity: 0.6;
 }
 
-.session-rename:hover {
+.session-menu-button:hover,
+.session-menu-button[aria-expanded="true"] {
   opacity: 1;
   background: var(--bg-hover);
   color: var(--text);
 }
 
-.session-rename:focus-visible {
+.session-menu-button:focus-visible {
   opacity: 1;
   outline: none;
   box-shadow: 0 0 0 1px var(--accent);
 }
+
+/*
+ * Pinned is a state the card does have to answer, and in the grouped sidebar the
+ * `Pinned` header answers it. Search results have no headers, so the mark is
+ * what carries it there. Not a button: the action lives in the menu, and a
+ * control that looks clickable but only reports would be worse than a glyph.
+ */
+.session-pinned-mark {
+  position: absolute;
+  top: 3px;
+  right: 24px;
+  z-index: 2;
+  display: inline-flex;
+  color: var(--accent);
+  pointer-events: none;
+}
+
+/*
+ * One line at rest. A sidebar that pages is read by scanning names, and the
+ * project, branch, time and token chips are all answers to questions you only
+ * ask about the task you are actually in — so they belong to the open card.
+ *
+ * The status banner is the exception, and stays: "running" and "needs input" are
+ * the two things you want to see without opening anything, which is the whole
+ * reason the sidebar highlights them at all. The pid goes, being detail.
+ */
+.session-card:not(.selected) .card-meta,
+.session-card:not(.selected) .card-metrics,
+.session-card:not(.selected) .card-status-pid {
+  display: none;
+}
+
+/* Room for the ⋮, so a long name never runs under it. */
+.session-card .card-title {
+  padding-right: 20px;
+}
+
+/* ── Card menu (portal on body, so the rail cannot clip it) ── */
+.session-card-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 184px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-menu);
+  box-shadow: var(--shadow-md);
+}
+
+.session-card-menu-item {
+  display: block;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.session-card-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.session-card-menu-item:focus-visible {
+  outline: none;
+  background: var(--bg-hover);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.session-card-menu-item.separated {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  border-radius: 0 0 4px 4px;
+}
+
+.session-card-menu-item.danger {
+  color: var(--danger-text);
+}
+
+.session-card-menu-item.danger:hover {
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+
+
 
 @media (prefers-reduced-motion: reduce) {
   .session-cards .session-card::before,
@@ -1098,8 +1147,7 @@
     opacity: 1;
   }
 
-  .session-pin,
-  .session-rename,
+  .session-menu-button,
   .project-group-new {
     transition: none;
   }

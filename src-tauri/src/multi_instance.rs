@@ -112,15 +112,62 @@ pub struct NewInstance {
     pub pid: u32,
 }
 
+/// The one flag this application passes to itself.
+///
+/// A window is otherwise told nothing on its command line — it inherits the
+/// environment and working directory and picks its own project — so this is the
+/// whole protocol between two windows, and `session_from_args` is all of the
+/// parsing it needs.
+pub const SESSION_ARG: &str = "--session";
+
+/// The session id this process was started with, if any.
+///
+/// Split from [`session_from_args`] so the parsing can be tested without a
+/// process to start.
+pub fn startup_session() -> Option<String> {
+    session_from_args(std::env::args().skip(1))
+}
+
+/// `--session <id>` out of a command line, ignoring anything else on it.
+///
+/// An id that fails the shared shape check is dropped rather than passed on: it
+/// reached us from another process's command line, and the window would only
+/// hand it straight to a lookup.
+pub fn session_from_args<I>(args: I) -> Option<String>
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        let value = if arg == SESSION_ARG {
+            args.next()
+        } else {
+            arg.strip_prefix(&format!("{SESSION_ARG}="))
+                .map(|rest| rest.to_string())
+        };
+        if let Some(value) = value {
+            return crate::session_trash::is_safe_id(&value).then_some(value);
+        }
+    }
+    None
+}
+
 /// Start another instance of this application: same executable, fresh process.
 ///
-/// The child inherits our environment and working directory and opens its own
-/// dashboard; projects are chosen per window, so nothing is passed on the
-/// command line.
-pub fn launch_sibling_instance() -> Result<NewInstance, String> {
+/// The child inherits our environment and working directory. With `session` it
+/// opens straight onto that task; without one it comes up on its own dashboard,
+/// which is what the titlebar's New window does.
+pub fn launch_sibling_instance(session: Option<String>) -> Result<NewInstance, String> {
     let exe = std::env::current_exe()
         .map_err(|error| format!("Cannot locate this application: {error}"))?;
-    let mut child = Command::new(&exe)
+    let mut command = Command::new(&exe);
+    if let Some(id) = session.as_deref() {
+        if !crate::session_trash::is_safe_id(id) {
+            return Err(format!("{id:?} is not a session id"));
+        }
+        command.args([SESSION_ARG, id]);
+    }
+    let mut child = command
         .spawn()
         .map_err(|error| format!("Cannot start {}: {error}", exe.display()))?;
     let pid = child.id();
@@ -138,6 +185,52 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static SEQ: AtomicU64 = AtomicU64::new(0);
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn finds_the_session_a_window_was_opened_for() {
+        let id = "01a01d2e-dfda-7460-9343-518ad1acf115";
+        assert_eq!(
+            session_from_args(args(&["--session", id])),
+            Some(id.to_string())
+        );
+        assert_eq!(
+            session_from_args(args(&[&format!("--session={id}")])),
+            Some(id.to_string())
+        );
+    }
+
+    #[test]
+    fn a_window_opened_with_no_session_picks_its_own() {
+        assert_eq!(session_from_args(args(&[])), None);
+        assert_eq!(session_from_args(args(&["--other", "x"])), None);
+        // The flag with nothing after it is a malformed line, not a session.
+        assert_eq!(session_from_args(args(&["--session"])), None);
+    }
+
+    #[test]
+    fn ignores_arguments_it_was_not_asked_about() {
+        let id = "01a01d2e-dfda-7460-9343-518ad1acf115";
+        assert_eq!(
+            session_from_args(args(&["--flag", "--session", id, "trailing"])),
+            Some(id.to_string())
+        );
+    }
+
+    #[test]
+    fn drops_an_id_that_could_escape_a_lookup() {
+        // It arrived on a command line; the window would hand it to a path.
+        for bad in ["../escape", "a/b", "", "has space"] {
+            assert_eq!(
+                session_from_args(args(&["--session", bad])),
+                None,
+                "{bad:?}"
+            );
+        }
+    }
 
     fn temp_target(name: &str) -> PathBuf {
         let n = SEQ.fetch_add(1, Ordering::SeqCst);

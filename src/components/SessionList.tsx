@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { ManagedStatus, SessionCard } from "../types";
 import {
   contextPct,
@@ -16,6 +16,9 @@ import {
 import { NO_SESSIONS, useProjectGroups } from "../hooks/useProjectGroups";
 import { sortPinnedFirst, useSessionPins } from "../hooks/useSessionPins";
 import { useSessionTitles } from "../hooks/useSessionTitles";
+import { useSessionArchive } from "../hooks/useSessionArchive";
+import { openNewWindow, trashSession } from "../api";
+import { SessionCardMenu, type CardMenuItem } from "./SessionCardMenu";
 import { applyOverflowTitle, cardTitleTooltip } from "../utils/overflowTitle";
 import { ProjectGroupList } from "./ProjectGroupList";
 
@@ -38,17 +41,13 @@ function PinGlyph({ filled }: { filled: boolean }) {
   );
 }
 
-/** Pencil. Sits beside the pin, revealed with it on hover. */
-function RenameGlyph() {
+/** Vertical ellipsis. The card's one control; everything else is in its menu. */
+function MenuGlyph() {
   return (
-    <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden focusable="false">
-      <path
-        d="M8.1 1.7a1.1 1.1 0 0 1 1.6 0l.6.6a1.1 1.1 0 0 1 0 1.6l-5 5-2.5.6.6-2.5 4.7-5.3Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.1"
-        strokeLinejoin="round"
-      />
+    <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden focusable="false">
+      <circle cx="6" cy="2.4" r="1.05" fill="currentColor" />
+      <circle cx="6" cy="6" r="1.05" fill="currentColor" />
+      <circle cx="6" cy="9.6" r="1.05" fill="currentColor" />
     </svg>
   );
 }
@@ -92,8 +91,20 @@ export function SessionList({
   hasMore,
   onLoadMore,
 }: Props) {
-  const { pinnedIds, isPinned, togglePinned } = useSessionPins();
+  const { pinnedIds, isPinned, togglePinned, unpin } = useSessionPins();
+  const { archivedIds, isArchived, toggleArchived } = useSessionArchive();
   const { displayTitle, originalTitle, rename } = useSessionTitles();
+
+  /** The card whose menu is open, and where it was opened. */
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(
+    null,
+  );
+  /** The card a delete was asked for, held until it is confirmed. */
+  const [pendingDelete, setPendingDelete] = useState<SessionCard | null>(null);
+  /** What went wrong with the last delete, if anything. */
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const closeMenu = useCallback(() => setMenu(null), []);
 
   /** The card whose name is being edited, if any. One at a time. */
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -145,9 +156,56 @@ export function SessionList({
   // session tree on each keystroke.
   const { groups, indexed, isCollapsed, toggleCollapsed } = useProjectGroups(
     searching ? NO_SESSIONS : visible,
-    { selectedId, pinnedIds },
+    { selectedId, pinnedIds, archivedIds },
   );
   const grouped = !searching && indexed && groups.length > 0;
+
+  /**
+   * What the card menu offers, in the order a hand reaches for it: the two ways
+   * to open it, then the two ways to label it, then the two ways to put it away
+   * — reversible first, and the one that touches disk last and marked.
+   */
+  function menuItems(s: SessionCard): CardMenuItem[] {
+    const archived = isArchived(s.id);
+    return [
+      {
+        label: "Open in new window",
+        onSelect: () => {
+          void openNewWindow(s.id);
+        },
+      },
+      {
+        label: isPinned(s.id) ? "Unpin" : "Pin",
+        separated: true,
+        onSelect: () => togglePinned(s.id),
+      },
+      {
+        label: "Rename",
+        onSelect: () => {
+          abandonRename.current = false;
+          setRenamingId(s.id);
+        },
+      },
+      {
+        label: archived ? "Unarchive" : "Archive",
+        separated: true,
+        onSelect: () => {
+          // A card cannot be in two built groups at once, and the top of the
+          // list is not where something you are done with belongs.
+          if (!archived) unpin(s.id);
+          toggleArchived(s.id);
+        },
+      },
+      {
+        label: "Delete…",
+        danger: true,
+        onSelect: () => {
+          setDeleteError(null);
+          setPendingDelete(s);
+        },
+      },
+    ];
+  }
 
   function renderCard(s: SessionCard) {
     const managedStatus = managedStatuses?.[s.id];
@@ -181,37 +239,39 @@ export function SessionList({
         key={s.id}
         className={cardClass}
         onClick={() => onSelect(s.id)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setMenu({ id: s.id, x: e.clientX, y: e.clientY });
+        }}
         title={stateTitle(state)}
         aria-busy={
           state === "running" || state === "starting" ? true : undefined
         }
       >
+        {pinned && (
+          <span
+            className="session-pinned-mark"
+            title="Pinned"
+            aria-label="Pinned"
+          >
+            <PinGlyph filled />
+          </span>
+        )}
         <button
           type="button"
-          className="session-pin"
-          aria-pressed={pinned}
-          title={pinned ? "Unpin" : "Pin to the top of the list"}
-          aria-label={pinned ? `Unpin ${name}` : `Pin ${name} to the top`}
+          className="session-menu-button"
+          aria-haspopup="menu"
+          aria-expanded={menu?.id === s.id}
+          title="Actions"
+          aria-label={`Actions for ${name}`}
           onClick={(e) => {
             // The card behind this button opens the session on click.
             e.stopPropagation();
-            togglePinned(s.id);
+            const r = e.currentTarget.getBoundingClientRect();
+            setMenu({ id: s.id, x: r.left, y: r.bottom + 2 });
           }}
         >
-          <PinGlyph filled={pinned} />
-        </button>
-        <button
-          type="button"
-          className="session-rename"
-          title="Rename"
-          aria-label={`Rename ${name}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            abandonRename.current = false;
-            setRenamingId(s.id);
-          }}
-        >
-          <RenameGlyph />
+          <MenuGlyph />
         </button>
         {state !== "idle" && (
           <div className="card-status">
@@ -374,6 +434,81 @@ export function SessionList({
           </button>
         )}
       </div>
+
+      {menu &&
+        (() => {
+          const card = visible.find((s) => s.id === menu.id);
+          if (!card) return null;
+          return (
+            <SessionCardMenu
+              at={{ x: menu.x, y: menu.y }}
+              items={menuItems(card)}
+              onClose={closeMenu}
+              label={displayTitle(card)}
+            />
+          );
+        })()}
+
+      {pendingDelete && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setPendingDelete(null)}
+        >
+          <div
+            className="modal delete-session-modal"
+            role="dialog"
+            aria-modal
+            aria-labelledby="delete-session-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2 id="delete-session-title">Delete this task?</h2>
+            </div>
+            <p className="delete-session-name">
+              {displayTitle(pendingDelete)}
+            </p>
+            <p className="delete-session-note">
+              Its folder moves to <code>.trash</code> inside the session store.
+              It leaves this list and <code>grok</code> stops seeing it, but
+              nothing is erased — moving the folder back brings it all the way
+              back.
+            </p>
+            {deleteError && (
+              <p className="delete-session-error">{deleteError}</p>
+            )}
+            <div className="modal-actions">
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={() => setPendingDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn danger"
+                type="button"
+                onClick={() => {
+                  const card = pendingDelete;
+                  void trashSession(card.id)
+                    .then(() => {
+                      // The watcher drops the card on its own; clear our own
+                      // notes so a new session cannot inherit them by id reuse.
+                      unpin(card.id);
+                      setPendingDelete(null);
+                    })
+                    .catch((e: unknown) =>
+                      setDeleteError(
+                        e instanceof Error ? e.message : String(e),
+                      ),
+                    );
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
