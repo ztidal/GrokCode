@@ -667,7 +667,7 @@
 .project-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 1px;
   min-width: 0;
   flex-shrink: 0;
 }
@@ -814,7 +814,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0.01em;
 }
 
