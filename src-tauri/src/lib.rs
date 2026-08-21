@@ -6,6 +6,7 @@ mod agent_types;
 mod ask_user_question;
 mod auth;
 mod billing;
+mod clipboard_paste;
 mod config;
 mod fs_atomic;
 mod json_util;
@@ -636,6 +637,28 @@ fn startup_session() -> Option<String> {
     multi_instance::startup_session()
 }
 
+/// Absolute paths of the files currently on the clipboard.
+///
+/// Empty when there are none, which is what most pastes are. The webview cannot
+/// answer this itself: it is handed `File` objects with their paths stripped.
+#[tauri::command]
+async fn clipboard_file_paths() -> Vec<String> {
+    tauri::async_runtime::spawn_blocking(clipboard_paste::clipboard_file_paths)
+        .await
+        .unwrap_or_default()
+}
+
+/// Write a pasted bitmap out and answer with its path.
+///
+/// Only for clipboard data with no file behind it — a screenshot. Files copied
+/// in Explorer already have a path and are never duplicated.
+#[tauri::command]
+async fn save_pasted_image(data: String, mime: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || clipboard_paste::save_pasted_image(&data, &mime))
+        .await
+        .map_err(|e| format!("paste task failed: {e}"))?
+}
+
 /// The names people have given their sessions, session id → name.
 ///
 /// Read once when a window starts. Absent or unreadable answers an empty map:
@@ -792,6 +815,8 @@ pub fn run() {
             open_new_window,
             startup_session,
             trash_session,
+            clipboard_file_paths,
+            save_pasted_image,
             list_session_titles,
             set_session_title,
         ])

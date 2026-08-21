@@ -530,6 +530,30 @@ export async function startupSession(): Promise<string | null> {
 }
 
 /**
+ * Absolute paths of the files currently on the clipboard.
+ *
+ * The webview cannot answer this: a paste hands it `File` objects with their
+ * paths stripped, on purpose. Empty when the clipboard holds no files, which is
+ * what a text paste and a screenshot both look like from here.
+ */
+export async function clipboardFilePaths(): Promise<string[]> {
+  return invoke<string[]>("clipboard_file_paths");
+}
+
+/**
+ * Write a pasted bitmap out and resolve with its path.
+ *
+ * Only for a screenshot — clipboard data with no file behind it. Files copied
+ * in Explorer already have a path and are never duplicated.
+ */
+export async function savePastedImage(
+  data: string,
+  mime: string,
+): Promise<string> {
+  return invoke<string>("save_pasted_image", { data, mime });
+}
+
+/**
  * The names people have given their sessions, session id → name.
  *
  * Read once when a window starts. These live beside the other host-side
