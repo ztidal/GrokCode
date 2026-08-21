@@ -845,7 +845,7 @@
 
 .session-cards {
   overflow: auto;
-  padding: 4px 10px 14px 0;
+  padding: 4px 8px 14px 6px;
   display: flex;
   flex-direction: column;
   /* No boxes to hold apart; the rows' own padding is the rhythm. */
@@ -1017,7 +1017,7 @@
 /* Selected: Base fill + soft elevation (default border kept) */
 .session-card.selected,
 .session-card.selected:hover {
-  background: rgb(var(--rp-hl-med-rgb) / 0.6);
+  background: rgb(var(--rp-hl-med-rgb) / 0.9);
   z-index: 1;
   transition: none;
 }
@@ -1035,9 +1035,10 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  position: relative;
   /* Left pad clears the mark, which is positioned rather than inline so the
      title keeps its own ellipsis measurement. */
-  padding: 9px 6px 10px 28px;
+  padding: 5px 6px 6px 24px;
   min-width: 0;
 }
 
@@ -1047,10 +1048,20 @@
  */
 .session-mark {
   position: absolute;
-  left: 11px;
-  top: 13px;
-  width: 7px;
-  height: 7px;
+  left: 8px;
+  /*
+   * Centred on the title's first line, which is why it hangs off `.card-body`
+   * rather than the card: a card with a status line above the body would leave
+   * it beside the wrong text.
+   *
+   * An absolute child is placed against its ancestor's padding box, so this is
+   * the body's own top padding plus half the line it sits on, less half the
+   * mark. It cannot ride on the title as a ::before, because a selected title
+   * paints itself with background-clip: text and would clip the mark away too.
+   */
+  top: 11px;
+  width: 6px;
+  height: 6px;
   box-sizing: border-box;
   border-radius: 50%;
   border: 1px solid var(--text-muted);
@@ -1093,16 +1104,20 @@
   opacity: 1;
 }
 
-/* Idle cards need a bit more top air without a ribbon */
+/* Idle cards need a touch more top air without a status line above them */
 .session-card.state-idle .card-body {
-  padding-top: 10px;
+  padding-top: 6px;
+}
+
+.session-card.state-idle .session-mark {
+  top: 12px;
 }
 
 .card-title {
-  font-weight: 600;
+  font-weight: 500;
   font-size: 13px;
   letter-spacing: -0.01em;
-  line-height: 1.3;
+  line-height: 1.35;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
