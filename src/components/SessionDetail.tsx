@@ -30,7 +30,7 @@ import type { ResolvePermissionFn } from "../utils/permissionPayload";
 import type { PromptQueueController } from "../hooks/usePromptQueueController";
 import {
   composeTimelineTail,
-  unresolvedPending,
+  isStillPending,
   type PendingPrompt,
 } from "../hooks/usePendingPrompts";
 import { DiffPanel } from "./DiffPanel";
@@ -57,8 +57,10 @@ interface Props {
   onSessionModeChange: (mode: SessionMode) => void;
   onSendPrompt: (text: string) => void;
   promptQueue: PromptQueueController;
-  pendingPrompts: PendingPrompt[];
-  onRetirePending: (ids: string[]) => void;
+  pendingPrompt: PendingPrompt | null;
+  /** When grok last said anything about this task's queue. */
+  pendingAckAt: number;
+  onRetirePending: (sessionId: string | null) => void;
   /** The selected task, which leads the loaded detail during a switch. */
   pendingSessionId: string | null;
   onResolvePermission: ResolvePermissionFn;
@@ -100,7 +102,8 @@ export function SessionDetailView({
   onSessionModeChange,
   onSendPrompt,
   promptQueue,
-  pendingPrompts,
+  pendingPrompt,
+  pendingAckAt,
   onRetirePending,
   pendingSessionId,
   onResolvePermission,
@@ -116,34 +119,33 @@ export function SessionDetailView({
 }: Props) {
   const tabBodyRef = useRef<HTMLDivElement>(null);
 
-  // Scoped to the selected task rather than the loaded one: selecting another
-  // task changes the selection immediately while `detail` still describes the
-  // previous one, and the stale id would put one task's pending message at the
-  // bottom of another.
-  const unresolved = useMemo(
+  // A clock of its own. The acknowledgement timeout exists for a send that
+  // produces no events at all, and a `Date.now()` read inside a memo is only
+  // resampled when one of that memo's dependencies changes — which in exactly
+  // that case never happens again.
+  const [clock, setClock] = useState(() => Date.now());
+  const awaitingAck = Boolean(pendingPrompt);
+  useEffect(() => {
+    if (!awaitingAck) return;
+    setClock(Date.now());
+    const timer = window.setInterval(() => setClock(Date.now()), 2000);
+    return () => window.clearInterval(timer);
+  }, [awaitingAck]);
+
+  const pending = useMemo(
     () =>
-      unresolvedPending(
-        pendingPrompts,
-        timelineItems,
-        promptQueue.queue,
-        pendingSessionId,
-        Date.now(),
-      ),
-    [pendingPrompts, timelineItems, promptQueue.queue, pendingSessionId],
+      isStillPending(pendingPrompt, timelineItems, pendingAckAt, clock)
+        ? pendingPrompt
+        : null,
+    [pendingPrompt, timelineItems, pendingAckAt, clock],
   );
 
-  // Settling has to be made permanent. Resolution is derived from the loaded
-  // window, so a placeholder left in the store reappears the moment its echo
-  // scrolls out of that window.
+  // Settling has to be made permanent. The judgement above is re-derived from
+  // the loaded timeline window, so a placeholder left in the store would come
+  // back the moment its echo scrolled out of that window.
   useEffect(() => {
-    const live = new Set(unresolved.map((item) => item.id));
-    const settled = pendingPrompts
-      .filter(
-        (item) => item.sessionId === pendingSessionId && !live.has(item.id),
-      )
-      .map((item) => item.id);
-    if (settled.length) onRetirePending(settled);
-  }, [pendingPrompts, unresolved, pendingSessionId, onRetirePending]);
+    if (pendingPrompt && !pending) onRetirePending(pendingPrompt.sessionId);
+  }, [pendingPrompt, pending, onRetirePending]);
 
   // The composed list is for display only. Turn status, filters and the
   // subagent strip keep reading the real one, so a message that has not run
@@ -152,24 +154,51 @@ export function SessionDetailView({
     () =>
       composeTimelineTail(
         timelineItems,
-        unresolved,
+        pending,
         promptQueue.queue,
         managed?.handleId ?? "",
         pendingSessionId,
       ),
-    [timelineItems, unresolved, promptQueue.queue, managed, pendingSessionId],
+    [timelineItems, pending, promptQueue.queue, managed, pendingSessionId],
   );
 
-  // Held here rather than in the rows. Queued rows sit at the tail and the
+  // Row state lives here, not in the rows. Queued rows sit at the tail and the
   // virtualiser unmounts them as soon as they scroll out of view, which would
-  // discard a half-typed edit without saying so; and the interlock has to be
-  // shared, because reorder sends a whole-queue ordering — two rows acting at
-  // once would each compute it from the same stale list.
+  // discard a half-typed edit without saying so.
   const [queueDraft, setQueueDraft] = useState<{
     id: string;
     text: string;
+    focused?: boolean;
   } | null>(null);
   const [queueBusy, setQueueBusy] = useState<string | null>(null);
+  const queueEntries = promptQueue.queue?.entries;
+
+  // grok releases the lock, not the click that took it. Reorder sends a whole
+  // ordering, so a row that unlocked on its own round trip would let the next
+  // one compute an ordering from a snapshot that had not caught up.
+  useEffect(() => {
+    setQueueBusy(null);
+  }, [queueEntries]);
+
+  // …with a way out, because an action that never lands would otherwise wedge
+  // every control on the queue.
+  useEffect(() => {
+    if (!queueBusy) return;
+    const timer = window.setTimeout(() => setQueueBusy(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [queueBusy]);
+
+  // A draft outlives the row it belongs to, so it has to be dropped when the
+  // entry it was editing leaves the queue, or the task changes underneath it.
+  useEffect(() => {
+    if (queueDraft && !queueEntries?.some((e) => e.id === queueDraft.id)) {
+      setQueueDraft(null);
+    }
+  }, [queueDraft, queueEntries]);
+  useEffect(() => {
+    setQueueDraft(null);
+  }, [pendingSessionId]);
+
   const queueUi = useMemo(
     () => ({
       draft: queueDraft,

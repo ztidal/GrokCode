@@ -1,14 +1,26 @@
-import { useCallback, useState } from "react";
-import type { PromptQueueState, TimelineItem } from "../types";
+import { listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useState } from "react";
+import type {
+  AgentUpdateEvent,
+  PromptQueueState,
+  TimelineItem,
+} from "../types";
 
 /**
- * A prompt you have submitted that has not shown up in the stream yet.
+ * The message you have just submitted, until grok says something about it.
  *
  * Between pressing enter and grok acknowledging, the text exists nowhere: the
  * composer has cleared, grok has not echoed it back, and — mid-turn — its queue
  * has not reported it either. That gap is one round trip long and reads as the
- * message having been swallowed. These stand in for it until the real thing
- * arrives, and are retired the moment it does.
+ * message having been swallowed.
+ *
+ * There is at most one of these per task, and it is deliberately dumb: it does
+ * not try to work out *which* message grok is talking about. An earlier version
+ * matched placeholders to queue entries and echoes by text, with per-occurrence
+ * accounting and recency windows, and every one of those rules had a way to
+ * settle the wrong message or the same one twice. Any word from grok about this
+ * task means the round trip is over and the real rows have taken over, which is
+ * the only thing this needs to know.
  */
 export interface PendingPrompt {
   id: string;
@@ -20,90 +32,36 @@ export interface PendingPrompt {
 }
 
 /**
- * How far back an echo may sit and still be read as this prompt's own.
- *
- * Without a window, a message sent twice in a session would match the first
- * send's echo and the second placeholder would never appear.
- */
-const ECHO_SKEW_MS = 2000;
-
-/**
  * How long a submission may go unacknowledged before we stop claiming it is on
  * its way.
  *
- * `AgentManager::prompt` returns `accepted: true` as soon as it has handed the
+ * `AgentManager::prompt` answers `accepted: true` as soon as it has handed the
  * text to a worker, before the RPC is attempted, so the send's promise resolves
- * whether or not the prompt ever reaches grok — there is no failure to catch.
- * Silence past this point is the only signal a send was lost, and a row that
- * claims to be waiting forever is worse than one that goes away.
+ * whether or not the prompt reaches grok. When the transport dies mid-dispatch
+ * not even a failure event is emitted. Silence past this point is the only
+ * signal left, and a row that claims to be waiting forever is worse than none.
  */
-const ACK_TIMEOUT_MS = 60_000;
-
-/** Whitespace-insensitive identity; grok re-flows what it echoes. */
-export function promptKey(text: string): string {
-  return text.trim().replace(/\s+/g, " ");
-}
+export const ACK_TIMEOUT_MS = 45_000;
 
 /**
- * The submissions this session is still standing in for.
+ * Whether this submission is still the only sign of itself.
  *
- * Accounting is per occurrence rather than by presence: sending "continue"
- * while an earlier "continue" is still queued has to leave two rows, so each
- * queue entry, running prompt and echo can settle exactly one placeholder.
+ * `ackAt` is when grok last said anything about this task's queue; an echoed
+ * user message is the other way a submission stops being invisible. Either one
+ * means the real rows are carrying the message now.
  */
-export function unresolvedPending(
-  pending: PendingPrompt[],
+export function isStillPending(
+  pending: PendingPrompt | null,
   items: TimelineItem[],
-  queue: PromptQueueState | null,
-  sessionId: string | null,
+  ackAt: number,
   now: number,
-): PendingPrompt[] {
-  const mine = pending.filter((item) => item.sessionId === sessionId);
-  if (!mine.length) return mine;
-
-  const credits = new Map<string, number>();
-  const credit = (text: string | null | undefined) => {
-    if (!text) return;
-    const key = promptKey(text);
-    credits.set(key, (credits.get(key) ?? 0) + 1);
-  };
-  for (const entry of queue?.entries ?? []) {
-    credit(entry.text);
-    // grok may merge adjacent submissions into one entry; each message it
-    // swallowed still has a placeholder waiting to be settled.
-    for (const part of entry.combinedTexts ?? []) credit(part);
-  }
-  credit(queue?.runningText);
-  for (const part of queue?.runningCombinedTexts ?? []) credit(part);
-
-  const spentEchoes = new Set<string>();
-  const unresolved: PendingPrompt[] = [];
-  for (const item of [...mine].sort((a, b) => a.ts - b.ts)) {
-    if (now - item.ts > ACK_TIMEOUT_MS) continue;
-
-    const key = promptKey(item.text);
-    const owed = credits.get(key) ?? 0;
-    if (owed > 0) {
-      credits.set(key, owed - 1);
-      continue;
-    }
-
-    const echo = items.find(
-      (candidate) =>
-        candidate.kind === "user" &&
-        !candidate.pending &&
-        !spentEchoes.has(candidate.id) &&
-        candidate.ts >= item.ts - ECHO_SKEW_MS &&
-        promptKey(candidate.detail ?? candidate.title ?? "") === key,
-    );
-    if (echo) {
-      spentEchoes.add(echo.id);
-      continue;
-    }
-
-    unresolved.push(item);
-  }
-  return unresolved;
+): boolean {
+  if (!pending) return false;
+  if (now - pending.ts > ACK_TIMEOUT_MS) return false;
+  if (ackAt > pending.ts) return false;
+  return !items.some(
+    (item) => item.kind === "user" && !item.pending && item.ts > pending.ts,
+  );
 }
 
 /**
@@ -117,13 +75,13 @@ export function unresolvedPending(
  */
 export function composeTimelineTail(
   items: TimelineItem[],
-  unresolved: PendingPrompt[],
+  pending: PendingPrompt | null,
   queue: PromptQueueState | null,
   handleId: string,
   sessionId: string | null,
 ): TimelineItem[] {
   const entries = queue?.entries ?? [];
-  if (!entries.length && !unresolved.length) return items;
+  if (!entries.length && !pending) return items;
 
   const tail: TimelineItem[] = [];
   for (const entry of entries) {
@@ -138,74 +96,91 @@ export function composeTimelineTail(
       pending: { state: "queued", entry },
     });
   }
-  for (const item of unresolved) {
+  if (pending) {
     tail.push({
-      id: `pending-${item.id}`,
+      id: `pending-${pending.id}`,
       handleId,
       sessionId,
       kind: "user",
       title: "",
-      detail: item.text,
+      detail: pending.text,
       ts: 0,
-      pending: { state: item.queued ? "queued" : "sending" },
+      pending: { state: pending.queued ? "queued" : "sending" },
     });
   }
   return [...items, ...tail];
 }
 
 export interface PendingPromptsController {
-  pending: PendingPrompt[];
-  /** Show this text at the tail until grok accounts for it. */
-  remember: (sessionId: string, text: string, queued: boolean) => string;
-  /**
-   * Forget placeholders that are finished with — settled, timed out, or sent
-   * from a path that failed before dispatch.
-   *
-   * Retiring matters as much as showing: resolution is re-derived from the
-   * loaded timeline window, so a placeholder left in the store comes back the
-   * moment its echo scrolls out of that window.
-   */
-  retire: (ids: string[]) => void;
-  /**
-   * Drop everything this task is still standing in for, because a prompt it
-   * dispatched came back an error.
-   *
-   * Settled placeholders are already gone by the time this runs, so whatever
-   * remains is a message that will never be echoed and never be queued.
-   */
-  retireSession: (sessionId: string) => void;
+  /** The outstanding submission per task, and when grok last spoke about it. */
+  pendingFor: (sessionId: string | null) => PendingPrompt | null;
+  ackFor: (sessionId: string | null) => number;
+  /** Show this text at the tail until grok says anything about this task. */
+  remember: (sessionId: string, text: string, queued: boolean) => void;
+  /** Drop this task's placeholder — settled, timed out, or never dispatched. */
+  retire: (sessionId: string | null) => void;
 }
 
 export function usePendingPrompts(): PendingPromptsController {
-  const [pending, setPending] = useState<PendingPrompt[]>([]);
+  const [pending, setPending] = useState<Map<string, PendingPrompt>>(
+    () => new Map(),
+  );
+  const [acks, setAcks] = useState<Map<string, number>>(() => new Map());
+
+  // Any queue update is grok speaking about this task, whatever it says.
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    void listen<AgentUpdateEvent>("agent-notification", ({ payload }) => {
+      if (cancelled || payload.method !== "x.ai/queue/changed") return;
+      const sessionId =
+        payload.sessionId ?? (payload.params?.sessionId as string | undefined);
+      if (!sessionId) return;
+      setAcks((previous) => new Map(previous).set(sessionId, Date.now()));
+    }).then((dispose) => {
+      if (cancelled) dispose();
+      else unlisten = dispose;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
   const remember = useCallback(
     (sessionId: string, text: string, queued: boolean) => {
-      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      setPending((previous) => [
-        ...previous.slice(-16),
-        { id, sessionId, text, ts: Date.now(), queued },
-      ]);
-      return id;
+      setPending((previous) =>
+        new Map(previous).set(sessionId, {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          sessionId,
+          text,
+          ts: Date.now(),
+          queued,
+        }),
+      );
     },
     [],
   );
 
-  const retire = useCallback((ids: string[]) => {
-    if (!ids.length) return;
-    const drop = new Set(ids);
+  const retire = useCallback((sessionId: string | null) => {
+    if (!sessionId) return;
     setPending((previous) => {
-      const next = previous.filter((item) => !drop.has(item.id));
-      return next.length === previous.length ? previous : next;
+      if (!previous.has(sessionId)) return previous;
+      const next = new Map(previous);
+      next.delete(sessionId);
+      return next;
     });
   }, []);
 
-  const retireSession = useCallback((sessionId: string) => {
-    setPending((previous) => {
-      const next = previous.filter((item) => item.sessionId !== sessionId);
-      return next.length === previous.length ? previous : next;
-    });
-  }, []);
+  const pendingFor = useCallback(
+    (sessionId: string | null) =>
+      sessionId ? (pending.get(sessionId) ?? null) : null,
+    [pending],
+  );
+  const ackFor = useCallback(
+    (sessionId: string | null) => (sessionId ? (acks.get(sessionId) ?? 0) : 0),
+    [acks],
+  );
 
-  return { pending, remember, retire, retireSession };
+  return { pendingFor, ackFor, remember, retire };
 }

@@ -196,8 +196,11 @@ export function TimelinePanel({
   const filtered = useMemo(() => {
     const indexed = items.map((item, sourceIndex) => ({ item, sourceIndex }));
     if (filter === "all") return indexed;
+    // A message that has not run survives every filter. It is not history to
+    // be sifted, it is the tail of the composer — and its controls are the only
+    // way to reorder or cancel it, which a filter should not be able to hide.
     return indexed.filter(
-      ({ item }) => (item.kind || "unknown") === filter,
+      ({ item }) => Boolean(item.pending) || (item.kind || "unknown") === filter,
     );
   }, [items, filter]);
 

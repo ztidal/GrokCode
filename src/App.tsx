@@ -210,7 +210,7 @@ function App() {
   // unhandled, a lost message keeps a row claiming it is on its way. The
   // transport-failure path emits nothing at all, which is what the placeholder's
   // own acknowledgement timeout is for.
-  const retirePendingForSession = pendingPrompts.retireSession;
+  const retirePendingForSession = pendingPrompts.retire;
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
@@ -453,6 +453,7 @@ function App() {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
     let coalesce: number | null = null;
+    let dueAt: number | null = null;
     void listen<{
       method?: string;
       sessionId?: string | null;
@@ -469,13 +470,22 @@ function App() {
       if (payload.sessionId && selected && payload.sessionId !== selected) {
         return;
       }
+      // Trailing, but with a ceiling: a burst that never pauses would keep
+      // pushing a purely trailing timer out and starve the refresh for exactly
+      // as long as the workspace was busiest.
+      const now = Date.now();
+      if (dueAt == null) dueAt = now + 1000;
       if (coalesce != null) window.clearTimeout(coalesce);
-      coalesce = window.setTimeout(() => {
-        coalesce = null;
-        setGitRefreshKey((n) => n + 1);
-        const current = selectedIdRef.current;
-        if (current) void refreshDetail(current, true);
-      }, 250);
+      coalesce = window.setTimeout(
+        () => {
+          coalesce = null;
+          dueAt = null;
+          setGitRefreshKey((n) => n + 1);
+          const current = selectedIdRef.current;
+          if (current) void refreshDetail(current, true);
+        },
+        Math.max(0, Math.min(250, dueAt - now)),
+      );
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
@@ -779,9 +789,10 @@ function App() {
   async function handleSend(text: string) {
     const trimmed = text.trim();
     if (!trimmed) return;
-    // Stands in for the message until grok echoes it or queues it. Without it
-    // the text leaves the composer and exists nowhere for a round trip.
-    let pendingId: string | null = null;
+    // Stands in for the message until grok says anything about this task.
+    // Without it the text leaves the composer and exists nowhere for a round
+    // trip.
+    let placeholderFor: string | null = null;
     setControlBusy(true);
     setError(null);
     setTab("timeline");
@@ -815,10 +826,10 @@ function App() {
         }
       }
 
-      const pendingSessionId = selectedId ?? sessions[0]?.id ?? null;
-      if (pendingSessionId) {
-        pendingId = pendingPrompts.remember(
-          pendingSessionId,
+      placeholderFor = selectedId ?? sessions[0]?.id ?? null;
+      if (placeholderFor) {
+        pendingPrompts.remember(
+          placeholderFor,
           trimmed,
           managedForSession?.status === "running" ||
             managedForSession?.status === "stopping",
@@ -838,13 +849,13 @@ function App() {
         const sessionId = selectedId ?? sessions[0]?.id ?? null;
         if (!sessionId) {
           setError("Select a task first, or create one with New.");
-          if (pendingId) pendingPrompts.retire([pendingId]);
+          pendingPrompts.retire(placeholderFor);
           return;
         }
         const info = await ensureAttached(sessionId);
         if (!info) {
           setError("Could not connect to this task.");
-          if (pendingId) pendingPrompts.retire([pendingId]);
+          pendingPrompts.retire(placeholderFor);
           return;
         }
         liveAgent = info;
@@ -890,7 +901,7 @@ function App() {
       // send that dies on the wire resolves this promise happily. A placeholder
       // that outlives its acknowledgement window is retired on that timeout
       // instead — this covers connect and mode errors, not lost prompts.
-      if (pendingId) pendingPrompts.retire([pendingId]);
+      pendingPrompts.retire(placeholderFor);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setControlBusy(false);
@@ -1165,7 +1176,8 @@ function App() {
           sessionMode={effectiveSessionMode}
           onSessionModeChange={(m) => void handleSessionModeChange(m)}
           onSendPrompt={(t) => void handleSend(t)}
-          pendingPrompts={pendingPrompts.pending}
+          pendingPrompt={pendingPrompts.pendingFor(selectedId)}
+          pendingAckAt={pendingPrompts.ackFor(selectedId)}
           onRetirePending={pendingPrompts.retire}
           pendingSessionId={selectedId}
           promptQueue={promptQueue}
