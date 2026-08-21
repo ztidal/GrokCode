@@ -13,6 +13,12 @@
  * ship a signature from a different build than the artifact it points at — the one failure that
  * looks perfectly healthy from the outside and breaks every client at install time.
  *
+ * That check cannot tell a build made through `branding/ztidalcode.json` from one made without it:
+ * the signing key comes from the environment, so both are correctly signed. Only the compiled-in
+ * updater identity differs, and a build without the overlay carries upstream's trust anchor and
+ * upstream's feed — it installs, runs and looks healthy, and then every client that installs it
+ * walks itself onto upstream's next release. So the binary is checked for our pubkey first.
+ *
  * Usage:
  *   node scripts/make-updater-json.mjs --notes "what changed in this release"
  *   node scripts/make-updater-json.mjs --notes-file NOTES.md --tag v0.0.8 --out latest.json
@@ -118,9 +124,44 @@ function verifyBundle(bytes, signatureB64, expectedName) {
   return trustedComment;
 }
 
-// --- collect the bundles ----------------------------------------------------------------------
+// --- provenance: the bundles must wrap a binary built through the overlay ---------------------
 
 const bundleDir = arg("bundle-dir", join(repoRoot, "src-tauri", "target", "release", "bundle"));
+
+const baseConf = JSON.parse(readFileSync(join(repoRoot, "src-tauri", "tauri.conf.json"), "utf8"));
+// Tauri names the executable after `mainBinaryName` and only falls back to `productName`; the
+// overlay is merged over the base config, so either file can be the one that supplies either key.
+const binaryName =
+  branding.mainBinaryName ?? baseConf.mainBinaryName ?? branding.productName ?? baseConf.productName;
+if (!binaryName) die("neither branding/ztidalcode.json nor src-tauri/tauri.conf.json names the binary");
+
+// Both installers wrap this one file, and both compress it, so the binary itself is the only
+// place the pubkey string is findable. It sits beside the bundle directory the build produced.
+const binary = join(bundleDir, "..", `${binaryName}.exe`);
+if (!existsSync(binary)) {
+  die(`${binary} is missing — build it: npm run tauri -- build --config branding/ztidalcode.json`);
+}
+const binaryBytes = readFileSync(binary);
+const carries = (key) => binaryBytes.includes(Buffer.from(key, "utf8"));
+
+if (!carries(pubkeyB64)) {
+  die(
+    `${basename(binary)} does not carry our updater key — it was built without ` +
+      "--config branding/ztidalcode.json; rebuild and re-bundle before publishing",
+  );
+}
+// Read out of the base config rather than pinned here, so this still names the right key after an
+// upstream sync rotates it.
+const upstreamPubkey = baseConf.plugins?.updater?.pubkey;
+if (upstreamPubkey && upstreamPubkey !== pubkeyB64 && carries(upstreamPubkey)) {
+  die(
+    `${basename(binary)} also carries the updater key from src-tauri/tauri.conf.json — the overlay ` +
+      "did not replace the trust anchor; do not publish this build",
+  );
+}
+console.log(`${basename(binary)}  ${binaryBytes.length} bytes  built through the branding overlay`);
+
+// --- collect the bundles ----------------------------------------------------------------------
 
 /** Newest bundle in `<bundleDir>/<subdir>` whose name ends with `ext` (ignoring `.sig` files). */
 function findBundle(subdir, ext) {

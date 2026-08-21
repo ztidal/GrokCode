@@ -30,6 +30,7 @@ import type { ResolvePermissionFn } from "../utils/permissionPayload";
 import type { PromptQueueController } from "../hooks/usePromptQueueController";
 import {
   composeTimelineTail,
+  isConnectionLoss,
   isStillPending,
   type PendingPrompt,
 } from "../hooks/usePendingPrompts";
@@ -132,12 +133,46 @@ export function SessionDetailView({
     return () => window.clearInterval(timer);
   }, [awaitingAck]);
 
+  // When an agent last dropped a live connection. A send that died with the
+  // transport is the case the timeout above was written for, and this is the
+  // evidence of it: the prompt itself stays silent, but the agent behind it
+  // does not.
+  const [connectionLost, setConnectionLost] = useState<{
+    sessionId: string;
+    at: number;
+  } | null>(null);
+  const lastManaged = useRef<ManagedAgentInfo | null>(null);
+  useEffect(() => {
+    const before = lastManaged.current;
+    lastManaged.current = managed;
+    // Compared per handle: selecting another task swaps one agent's status for
+    // another's, which is not a transition of either.
+    if (!managed?.sessionId || !before || before.handleId !== managed.handleId) {
+      return;
+    }
+    if (isConnectionLoss(before.status, managed.status)) {
+      setConnectionLost({ sessionId: managed.sessionId, at: Date.now() });
+    }
+  }, [managed]);
+
+  // A loss settles nothing outside the task it happened on. This view follows
+  // the selection, so it can watch one task's agent go down while holding
+  // another task's placeholder.
+  const connectionLostAt =
+    connectionLost?.sessionId === pendingSessionId ? connectionLost.at : 0;
+
   const pending = useMemo(
     () =>
-      isStillPending(pendingPrompt, timelineItems, pendingAckAt, clock)
+      isStillPending(
+        pendingPrompt,
+        timelineItems,
+        pendingAckAt,
+        connectionLostAt,
+        clock,
+      )
         ? pendingPrompt
         : null,
-    [pendingPrompt, timelineItems, pendingAckAt, clock],
+    [pendingPrompt, timelineItems, pendingAckAt, connectionLostAt, clock],
   );
 
   // Settling has to be made permanent. The judgement above is re-derived from

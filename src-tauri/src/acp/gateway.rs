@@ -59,6 +59,20 @@ pub struct AcpGateway {
     child: Arc<Mutex<Option<Child>>>,
 }
 
+/// A prefix of a line that is safe to log.
+///
+/// This took a byte slice. A UTF-8 string cannot be split at an arbitrary byte,
+/// so any line over the limit whose boundary landed inside a multi-byte
+/// character panicked the reader thread — and the only lines that reach here
+/// are the ones that failed to parse, which is exactly when the transport is
+/// already misbehaving. Chinese output made it near-certain rather than
+/// theoretical.
+fn truncate_for_log(line: &str) -> String {
+    line.chars().take(LOG_LINE_CHARS).collect()
+}
+
+const LOG_LINE_CHARS: usize = 200;
+
 impl AcpGateway {
     pub fn start(mut child: Child, on_notify: NotifyFn) -> Result<Self> {
         let pid = child.id();
@@ -343,7 +357,7 @@ fn run_stdout_reader(
             Err(e) => {
                 tracing::warn!(
                     error = %e,
-                    line = %&line[..line.len().min(200)],
+                    line = %truncate_for_log(line),
                     "ACP stdout line is not valid JSON"
                 );
                 continue;
@@ -495,5 +509,27 @@ pub(super) fn pending_with(reply: ReplyTx) -> PendingEntry {
     PendingEntry {
         reply,
         token: Arc::new(AtomicBool::new(false)),
+    }
+}
+
+#[cfg(test)]
+mod truncation_tests {
+    use super::truncate_for_log;
+
+    #[test]
+    fn a_long_line_of_chinese_truncates_instead_of_panicking() {
+        // This took a byte slice, and the only lines reaching it are ones that
+        // failed to parse — which is when the transport is already misbehaving.
+        // A crash there is the worst possible response.
+        let line = "工作区索引失败：".repeat(60);
+        assert!(line.len() > 200, "fixture must exceed the byte limit");
+        let out = truncate_for_log(&line);
+        assert_eq!(out.chars().count(), 200);
+        assert!(line.starts_with(&out));
+    }
+
+    #[test]
+    fn a_short_line_is_left_alone() {
+        assert_eq!(truncate_for_log("{\"ok\":1}"), "{\"ok\":1}");
     }
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ACK_TIMEOUT_MS,
   composeTimelineTail,
+  isConnectionLoss,
   isStillPending,
   type PendingPrompt,
 } from "./usePendingPrompts";
@@ -41,29 +42,38 @@ const queue = (...texts: string[]): PromptQueueState => ({
 
 describe("isStillPending", () => {
   it("stands in for the message while nothing has come back", () => {
-    expect(isStillPending(submitted(), [], 0, NOW)).toBe(true);
+    expect(isStillPending(submitted(), [], 0, 0, NOW)).toBe(true);
   });
 
   it("stops as soon as grok says anything about the queue", () => {
     // Deliberately not "says something about *this* message" — matching
     // placeholders to entries by text is what the earlier version did, and
     // every rule for it could settle the wrong one or the same one twice.
-    expect(isStillPending(submitted(), [], NOW + 400, NOW + 500)).toBe(false);
+    expect(isStillPending(submitted(), [], NOW + 400, 0, NOW + 500)).toBe(false);
   });
 
   it("stops once an echoed message appears after it", () => {
-    expect(isStillPending(submitted(), [userItem(NOW + 300)], 0, NOW + 400)).toBe(
-      false,
-    );
+    expect(
+      isStillPending(submitted(), [userItem(NOW + 300)], 0, 0, NOW + 400),
+    ).toBe(false);
+  });
+
+  it("stops when the connection it was sent on is lost", () => {
+    // Nothing will ever echo it: the RPC died on a transport that is now being
+    // reconnected, and the completion handler bails at the reconnecting guard
+    // without emitting. Waiting out the timeout would only delay the same
+    // answer.
+    expect(isStillPending(submitted(), [], 0, NOW + 300, NOW + 400)).toBe(false);
   });
 
   it("is not settled by what was already there when it was sent", () => {
-    // A queue update or a message from before the submission says nothing
-    // about it.
-    expect(isStillPending(submitted(), [userItem(NOW - 5_000)], 0, NOW)).toBe(
+    // A queue update, a message, or a dropped connection from before the
+    // submission says nothing about it.
+    expect(isStillPending(submitted(), [userItem(NOW - 5_000)], 0, 0, NOW)).toBe(
       true,
     );
-    expect(isStillPending(submitted(), [], NOW - 5_000, NOW)).toBe(true);
+    expect(isStillPending(submitted(), [], NOW - 5_000, 0, NOW)).toBe(true);
+    expect(isStillPending(submitted(), [], 0, NOW - 5_000, NOW)).toBe(true);
   });
 
   it("does not mistake its own row for an echo", () => {
@@ -71,23 +81,64 @@ describe("isStillPending", () => {
       id: "pending-p1",
       pending: { state: "sending" },
     });
-    expect(isStillPending(submitted(), [ownRow], 0, NOW + 400)).toBe(true);
+    expect(isStillPending(submitted(), [ownRow], 0, 0, NOW + 400)).toBe(true);
   });
 
   it("gives up when nothing ever acknowledges it", () => {
-    // A send that dies on the wire still resolves its promise and, when the
-    // transport is what died, emits no failure event either. Silence is the
-    // only signal left.
-    expect(isStillPending(submitted(), [], 0, NOW + ACK_TIMEOUT_MS + 1)).toBe(
+    // A send that dies on the wire still resolves its promise, and a failure
+    // the agent survives — a refused prompt, a worker that never runs — leaves
+    // its status alone too. Silence is the last signal there is.
+    expect(isStillPending(submitted(), [], 0, 0, NOW + ACK_TIMEOUT_MS + 1)).toBe(
       false,
     );
-    expect(isStillPending(submitted(), [], 0, NOW + ACK_TIMEOUT_MS - 1)).toBe(
+    expect(isStillPending(submitted(), [], 0, 0, NOW + ACK_TIMEOUT_MS - 1)).toBe(
       true,
     );
   });
 
   it("is nothing at all when nothing was submitted", () => {
-    expect(isStillPending(null, [], 0, NOW)).toBe(false);
+    expect(isStillPending(null, [], 0, 0, NOW)).toBe(false);
+  });
+});
+
+describe("isConnectionLoss", () => {
+  it("sees the transport go: a live agent flipped back to starting", () => {
+    // `handle_transport_closed` sets exactly this, and nothing else moves an
+    // agent from live to `starting`.
+    expect(isConnectionLoss("running", "starting")).toBe(true);
+    expect(isConnectionLoss("ready", "starting")).toBe(true);
+    expect(isConnectionLoss("awaitingPermission", "starting")).toBe(true);
+  });
+
+  it("leaves the first connect alone, which only ever climbs", () => {
+    // A prompt submitted here is remembered before `ensureAttached` even
+    // starts, and the seconds it takes are the whole reason the placeholder
+    // exists.
+    expect(isConnectionLoss("starting", "ready")).toBe(false);
+    expect(isConnectionLoss("starting", "running")).toBe(false);
+    expect(isConnectionLoss("starting", "starting")).toBe(false);
+  });
+
+  it("leaves a prompt queued behind a long turn alone", () => {
+    // The agent never stops being attached while it works through its queue.
+    expect(isConnectionLoss("running", "running")).toBe(false);
+    expect(isConnectionLoss("ready", "running")).toBe(false);
+    expect(isConnectionLoss("running", "awaitingPermission")).toBe(false);
+    expect(isConnectionLoss("awaitingPermission", "running")).toBe(false);
+  });
+
+  it("counts an agent stopped or failed out from under the send", () => {
+    // Not a transport failure, but the message is just as lost: the connection
+    // that was carrying it is gone and no row is coming.
+    expect(isConnectionLoss("running", "stopping")).toBe(true);
+    expect(isConnectionLoss("running", "stopped")).toBe(true);
+    expect(isConnectionLoss("running", "error")).toBe(true);
+  });
+
+  it("says nothing about an agent that was already down", () => {
+    expect(isConnectionLoss("stopped", "starting")).toBe(false);
+    expect(isConnectionLoss("error", "starting")).toBe(false);
+    expect(isConnectionLoss("stopped", "stopped")).toBe(false);
   });
 });
 

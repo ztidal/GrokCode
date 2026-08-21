@@ -18,7 +18,7 @@ use parking_lot::Mutex;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
@@ -52,6 +52,33 @@ struct PendingGate {
 }
 
 const INITIAL_CONNECTION_GENERATION: u64 = 1;
+
+/// Notification methods some consumer acts on **by name**, canonical form.
+///
+/// Not a filter — every notification is emitted regardless. This is the roster
+/// [`AgentManager::warn_unclaimed_notification`] measures against, so a name
+/// belongs here only once something reads it: the host below, or the UI, where
+/// `describeUpdate`'s default branch hides anything it does not recognise.
+///
+/// `session/update` is absent because it never reaches the warn — it takes its
+/// own branch out of `route_agent_message`.
+const CLAIMED_NOTIFICATIONS: &[&str] = &[
+    // Host-side, in this file.
+    "x.ai/queue/changed",           // adopts the running prompt id on reconnect
+    "x.ai/session/prompt_complete", // terminal_prompt_id
+    "x.ai/models/update",           // apply_models_update_notification
+    // UI-side, matched on the method string.
+    "x.ai/session_notification", // subagent + pending-interaction parsing
+    "x.ai/task_backgrounded",
+    "x.ai/task_completed",
+    "x.ai/fs_notify",        // workspace + git refresh
+    "x.ai/git_head_changed", // workspace + git refresh
+];
+
+/// Ceiling on the distinct unclaimed names remembered for the warn-once. The
+/// name arrives on the wire; an agent emitting a novel one per message must not
+/// be able to grow that set for as long as the window is open.
+const UNCLAIMED_NOTIFICATION_NAMES: usize = 64;
 
 fn finish_prompt(
     in_flight: &mut HashSet<String>,
@@ -708,6 +735,7 @@ impl AgentManager {
                 &params,
             );
         } else if !method.is_empty() {
+            Self::warn_unclaimed_notification(&method);
             Self::emit(inner, "agent-notification", payload);
         }
     }
@@ -730,6 +758,31 @@ impl AgentManager {
             Some(rest) if rest.starts_with("x.ai/") => rest,
             _ => method,
         }
+    }
+
+    /// Say so, once, when a notification arrives that nothing acts on.
+    ///
+    /// `canonical_method` fixed the name; it did not make the silence audible.
+    /// A notification whose method matches no consumer is emitted to the UI,
+    /// falls through `describeUpdate`'s default branch, is hidden as
+    /// control-plane traffic and leaves no trace — which is how
+    /// `_x.ai/queue/changed` stayed invisible for the whole life of the prompt
+    /// queue. The next one costs a line in the log file instead of a bug report.
+    ///
+    /// This runs on the notify-dispatch thread for every extension
+    /// notification, so it must stay cheap: one `&str` comparison against a
+    /// short list, then a set that is only ever touched by names not on it.
+    fn warn_unclaimed_notification(method: &str) {
+        if CLAIMED_NOTIFICATIONS.contains(&method) {
+            return;
+        }
+        static WARNED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+        let mut warned = WARNED.get_or_init(Mutex::default).lock();
+        // Once per distinct name, and never past the cap the const explains.
+        if warned.len() >= UNCLAIMED_NOTIFICATION_NAMES || !warned.insert(method.to_string()) {
+            return;
+        }
+        tracing::warn!(method, "notification has no consumer; nothing acts on it");
     }
 
     fn apply_models_update_notification(inner: &Arc<Inner>, handle_id: &str, params: &Value) {
@@ -1733,6 +1786,31 @@ mod tests {
             "_pinkcode/transport_closed"
         );
     }
+
+    /// The roster is only useful while it is spelled in the same form the warn
+    /// sees — the canonical one. An underscored entry would never match, and
+    /// the method it names would be reported as unclaimed forever.
+    #[test]
+    fn every_claimed_notification_is_spelled_canonically() {
+        for method in super::CLAIMED_NOTIFICATIONS {
+            assert_eq!(
+                super::AgentManager::canonical_method(method),
+                *method,
+                "{method} is not the name the warn compares against"
+            );
+        }
+    }
+
+    /// The one this whole warn exists for: `_x.ai/queue/changed` arrived, was
+    /// emitted, was acted on by nobody, and said nothing about it.
+    #[test]
+    fn the_notification_that_was_dropped_for_a_year_is_claimed_now() {
+        let canonical = super::AgentManager::canonical_method("_x.ai/queue/changed");
+        assert!(super::CLAIMED_NOTIFICATIONS.contains(&canonical));
+        // A method nobody reads is what the warn is looking for.
+        assert!(!super::CLAIMED_NOTIFICATIONS.contains(&"x.ai/announcements/update"));
+    }
+
     use super::{finish_prompt, finish_prompt_status, terminal_prompt_id, ManagedStatus};
     use serde_json::json;
     use std::collections::HashSet;

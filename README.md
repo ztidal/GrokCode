@@ -135,6 +135,15 @@ worth repeating for anyone changing this code:
   rebuild. See [ADR-0002](docs/adr/0002-no-permission-policy-layer.md).
 - **`Enter` sends and `Ctrl+Enter` inserts a newline**, which is the reverse of most chat apps.
 
+### Logs
+
+**Ask for this file first when someone says it stopped working.** An installed build is a windowed
+process with no console, so anything it writes to stderr is lost; it also appends to
+`~/.ztidalcode/logs/app-<date>-<pid>.log` (`%USERPROFILE%\.ztidalcode\logs\` on Windows). One file per
+process — each window is a separate one — and panics land there with a backtrace. Files are removed
+seven days after their last write, at startup. `PINKCODE_LOG_LEVEL=debug`, or
+`{"logLevel":"debug"}` in `~/.ztidalcode/config.json`, raises the level for the next launch.
+
 ## Development
 
 ### Prerequisites

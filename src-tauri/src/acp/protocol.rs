@@ -115,6 +115,13 @@ pub struct AuthMethodInfo {
 pub struct InitializeResultMeta {
     #[serde(default)]
     pub default_auth_method_id: Option<String>,
+    /// The agent build that answered the handshake. When grok changes its wire
+    /// behaviour under us the first question is which version did it, and until
+    /// this was kept the answer existed only in the reply serde had discarded.
+    #[serde(default)]
+    pub agent_version: Option<String>,
+    #[serde(default)]
+    pub agent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -129,15 +136,189 @@ pub struct InitializeResult {
 }
 
 impl InitializeResult {
+    /// Grok answers under `_meta`; the bare spelling is read too because the
+    /// same handshake already mixes both conventions elsewhere.
+    fn meta_either(&self) -> Option<&InitializeResultMeta> {
+        self.meta_underscore.as_ref().or(self.meta.as_ref())
+    }
+
     pub fn default_auth_method_id(&self) -> Option<&str> {
-        self.meta_underscore
-            .as_ref()
-            .or(self.meta.as_ref())
+        self.meta_either()
             .and_then(|m| m.default_auth_method_id.as_deref())
+    }
+
+    pub fn agent_version(&self) -> Option<&str> {
+        self.meta_either().and_then(|m| m.agent_version.as_deref())
+    }
+
+    pub fn agent_id(&self) -> Option<&str> {
+        self.meta_either().and_then(|m| m.agent_id.as_deref())
     }
 
     pub fn has_auth_method(&self, id: &str) -> bool {
         self.auth_methods.iter().any(|m| m.id == id)
+    }
+}
+
+/// The handshake reply as one log line, with `authMethods` reduced to its ids.
+///
+/// The reply is the only statement grok makes about what it can do, and
+/// `InitializeResult` models a handful of its fields — serde drops the rest
+/// before anything can look at them. It has already diverged from what we model
+/// once: capability keys arrive bare (`x.ai/fs_notify`) while the same methods
+/// only answer underscored, which cost a long session to find because the reply
+/// itself was gone by the time anyone asked. Logging it verbatim makes the next
+/// divergence a grep instead of a re-run. Measured at 1.0.5 the line is ~3.5 KB
+/// and `_meta` alone carries seventeen keys, of which this type reads three.
+///
+/// Names are not tokens: at 1.0.5 an entry is `{id, name, description}` and the
+/// nearest thing to a secret is the description `"Cached token from
+/// ~/.grok/auth.json"` — a path to the credential store, not its contents.
+/// `_meta` on an entry is still a free-form bag, though, so only the ids are
+/// kept: which methods were offered is the diagnostic part, and anything grok
+/// starts attaching to one cannot reach a log file by surprise.
+/// Field names that carry a credential wherever they appear.
+///
+/// The handshake has a slot for `mcpServers`, and an MCP server definition
+/// carries an `env` map — which is where a teammate's GitHub or Linear token
+/// lives. A log this line goes to is a file on disk that someone will attach to
+/// a bug report, so the reduction has to hold for values nobody has looked at
+/// yet, not only for the ones measured today.
+const REDACTED_KEYS: &[&str] = &[
+    "env",
+    "headers",
+    "token",
+    "apiKey",
+    "api_key",
+    "authorization",
+    "password",
+    "secret",
+];
+
+fn redact_credentials(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map.iter_mut() {
+                if REDACTED_KEYS.iter().any(|k| k.eq_ignore_ascii_case(key)) {
+                    *child = Value::String("<redacted>".into());
+                } else {
+                    redact_credentials(child);
+                }
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(redact_credentials),
+        _ => {}
+    }
+}
+
+pub fn initialize_reply_log_line(raw: &Value) -> String {
+    let mut body = raw.clone();
+    if let Some(methods) = body.get_mut("authMethods") {
+        if let Some(ids) = methods.as_array().map(|list| {
+            list.iter()
+                .map(|m| m.get("id").cloned().unwrap_or(Value::Null))
+                .collect()
+        }) {
+            *methods = Value::Array(ids);
+        }
+    }
+    redact_credentials(&mut body);
+    // Compact, and serde escapes any newline inside a string value.
+    body.to_string()
+}
+
+#[cfg(test)]
+mod handshake_contract_tests {
+
+    /// The handshake has a slot for `mcpServers`, and an MCP server definition
+    /// carries the `env` map a teammate's API tokens live in. The log line goes
+    /// to a file people attach to bug reports.
+    #[test]
+    fn a_token_in_the_handshake_never_reaches_the_log() {
+        let reply = json!({
+            "_meta": {
+                "mcpServers": [{
+                    "name": "github",
+                    "command": "npx",
+                    "env": { "GITHUB_TOKEN": "ghp_thisMustNotBeLogged" }
+                }]
+            }
+        });
+        let line = initialize_reply_log_line(&reply);
+        assert!(
+            !line.contains("ghp_thisMustNotBeLogged"),
+            "credential reached the log: {line}"
+        );
+        // Still worth logging: the server is named, so the shape stays legible.
+        assert!(
+            line.contains("github"),
+            "reduction lost the diagnostic: {line}"
+        );
+    }
+    use super::{initialize_reply_log_line, InitializeResult};
+    use serde_json::json;
+
+    /// The reply measured against agentVersion 1.0.5, trimmed to the parts this
+    /// client reads plus a few it does not — the second half is the point.
+    fn measured_reply() -> serde_json::Value {
+        json!({
+            "authMethods": [
+                {
+                    "id": "grok.com",
+                    "name": "Grok",
+                    "_meta": { "someFutureToken": "must-not-be-logged" }
+                },
+                { "id": "cached_token", "name": "Cached token" }
+            ],
+            "agentCapabilities": {
+                "loadSession": true,
+                "_meta": { "x.ai/fs_notify": true }
+            },
+            "_meta": {
+                "defaultAuthMethodId": "cached_token",
+                "agentVersion": "1.0.5",
+                "agentId": "grok-build",
+                "hostname": "desk-01",
+                "modelState": { "currentModelId": "grok-4.6" }
+            }
+        })
+    }
+
+    #[test]
+    fn handshake_keeps_the_agent_build_that_answered() {
+        let parsed: InitializeResult =
+            serde_json::from_value(measured_reply()).expect("handshake should deserialize");
+        assert_eq!(parsed.agent_version(), Some("1.0.5"));
+        assert_eq!(parsed.agent_id(), Some("grok-build"));
+        // Additive: the two fields that were already read still resolve.
+        assert_eq!(parsed.default_auth_method_id(), Some("cached_token"));
+        assert!(parsed.has_auth_method("grok.com"));
+    }
+
+    /// A reply from an agent that publishes neither must still parse — the
+    /// version is a diagnostic, never a gate.
+    #[test]
+    fn handshake_without_version_still_parses() {
+        let parsed: InitializeResult = serde_json::from_value(json!({
+            "authMethods": [{ "id": "cached_token" }]
+        }))
+        .expect("bare handshake should deserialize");
+        assert_eq!(parsed.agent_version(), None);
+        assert_eq!(parsed.agent_id(), None);
+    }
+
+    #[test]
+    fn handshake_log_line_is_one_line_and_carries_no_auth_material() {
+        let line = initialize_reply_log_line(&measured_reply());
+        assert!(!line.contains('\n'), "must stay one line: {line}");
+        assert!(
+            !line.contains("must-not-be-logged"),
+            "authMethods must not reach a log file: {line}"
+        );
+        assert!(line.contains(r#""authMethods":["grok.com","cached_token"]"#));
+        // The reason the line exists: keys this client does not model survive it.
+        assert!(line.contains("x.ai/fs_notify"));
+        assert!(line.contains(r#""agentVersion":"1.0.5""#));
     }
 }
 

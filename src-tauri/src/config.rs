@@ -23,11 +23,18 @@
 //! Startup tracing uses `resolve()` (env + global only). Config files are
 //! read-only from the host today (no settings UI); write path lives in tests
 //! via [`crate::fs_atomic`].
+//!
+//! [`init_tracing`] also owns the host's log file, because it is the one place
+//! that runs before `tauri::Builder` and already knows [`app_home`]. See
+//! [`LOG_DIR`] for why a release build has nowhere else to write.
 
 use crate::agent_types::PermissionMode;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 /// Permission mode a task starts in when nothing else has chosen one.
 ///
@@ -195,37 +202,208 @@ pub fn resolve() -> ResolvedConfig {
     finalize(merged)
 }
 
+/// `~/.ztidalcode/logs` — the second sink, and in an installed build the only
+/// one. `main.rs` sets `windows_subsystem = "windows"` for release, so the app
+/// a teammate launches from the Start Menu has no console behind stderr and
+/// every `warn!`/`error!` in the crate went nowhere.
+const LOG_DIR: &str = "logs";
+
+/// How long a log file outlives its last write. Retention is ours: the file
+/// name is per process, so nothing ever renames or replaces one, and without a
+/// prune the directory only grows.
+const LOG_RETENTION: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
+/// `app-<date>-<pid>.log`.
+///
+/// Per process, not per day. Several ZtidalCode windows run as separate OS
+/// processes over one `~/.ztidalcode` (see [`crate::multi_instance`]), and the
+/// usual daily rollover works by renaming the current file — which on Windows
+/// fails while another process holds it open, and fails *inside the writer*,
+/// where nobody is watching. The pid means no two windows ever share a file.
+/// The date is for the human reading the directory; [`prune_old_logs`] goes by
+/// mtime, not by this.
+fn log_file_name(now_secs: u64, pid: u32) -> String {
+    let stamp = crate::agent_runtime::unix_to_rfc3339_z(now_secs);
+    let date = stamp.split('T').next().unwrap_or("unknown");
+    format!("app-{date}-{pid}.log")
+}
+
+/// Delete `app-*.log` files last written before `cutoff`.
+///
+/// mtime rather than the date in the name: a window left open for a fortnight
+/// keeps appending to a file named for the day it started, so mtime is the only
+/// reading of "old" that cannot pull the file out from under a live process.
+fn prune_old_logs(dir: &Path, cutoff: SystemTime) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if !name.starts_with("app-") || !name.ends_with(".log") {
+            continue;
+        }
+        let Ok(modified) = entry.metadata().and_then(|meta| meta.modified()) else {
+            continue;
+        };
+        if modified < cutoff {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
+/// Make the log directory, drop what has aged out, and name this process's
+/// file. `None` leaves the host on stderr alone — where it was before.
+fn prepare_log_file() -> Option<PathBuf> {
+    let dir = app_home().join(LOG_DIR);
+    if let Err(error) = fs::create_dir_all(&dir) {
+        eprintln!("[ztidalcode] no log file ({}): {error}", dir.display());
+        return None;
+    }
+    if let Some(cutoff) = SystemTime::now().checked_sub(LOG_RETENTION) {
+        prune_old_logs(&dir, cutoff);
+    }
+    Some(dir.join(log_file_name(
+        crate::agent_runtime::now_unix_secs(),
+        std::process::id(),
+    )))
+}
+
+/// Appends one formatted event per `OpenOptions` open, synchronously.
+///
+/// Holding no handle between events costs an open per line — nothing at the
+/// volume this filter admits — and buys two things a background appender would
+/// take back: another window's startup prune can remove the file without
+/// wedging this process (the next event recreates it), and there is no queue to
+/// lose when a panic aborts.
+#[derive(Clone)]
+struct AppendFile(Arc<PathBuf>);
+
+struct AppendWriter(Arc<PathBuf>);
+
+impl std::io::Write for AppendWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.0.as_path())?;
+        file.write_all(buf)?;
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for AppendFile {
+    type Writer = AppendWriter;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        AppendWriter(Arc::clone(&self.0))
+    }
+}
+
+/// Write a panic to the log file with a handle opened on the spot, then hand
+/// the panic to whoever had the hook before us.
+///
+/// Deliberately not routed through tracing: a panic may abort, and anything
+/// still buffered is gone at exactly the moment its contents are the whole
+/// message. `force_capture` rather than `capture` because `RUST_BACKTRACE` is
+/// never set for an app started from a Start Menu shortcut, which is every
+/// install the team runs.
+fn install_panic_hook(path: PathBuf) {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+            let _ = writeln!(
+                file,
+                "\n{} PANIC pid={} {info}\n{backtrace}",
+                crate::agent_runtime::now_iso(),
+                std::process::id()
+            );
+        }
+        previous(info);
+    }));
+}
+
+/// The directive string both sinks are built from. `RUST_LOG` still wins over
+/// the resolved `log_level`, as it did when stderr was the only sink.
+fn tracing_directives(cfg: &ResolvedConfig) -> String {
+    use tracing_subscriber::EnvFilter;
+
+    if let Ok(raw) = std::env::var(EnvFilter::DEFAULT_ENV) {
+        if EnvFilter::try_new(&raw).is_ok() {
+            return raw;
+        }
+    }
+    config_directives(&cfg.log_level)
+}
+
+/// Config may be a bare level (`info`) or a full directive (`pinkcode=debug`).
+///
+/// A bare level raises *this crate* and pins everything else at `info`. That is
+/// what keeps the agent off our disk now that events reach one: `acp::gateway`
+/// pipes every line of `grok`'s stderr through
+/// `tracing::debug!(target: "grok_agent", …)`, so a global `debug` would write a
+/// teammate's entire agent session to a file.
+///
+/// This holds for the *config* path only. `RUST_LOG` bypasses it entirely — a
+/// bare `RUST_LOG=debug` is global and does put the agent's stderr on disk.
+/// That is a deliberate escape hatch for someone debugging the transport on
+/// their own machine, not a setting to hand a teammate.
+fn config_directives(log_level: &str) -> String {
+    let directive = log_level.trim();
+    if directive.contains('=') || directive.contains(',') {
+        directive.to_string()
+    } else {
+        format!("pinkcode={directive},info")
+    }
+}
+
 /// Initialize tracing from layered config. Safe to call once at startup.
 ///
 /// `RUST_LOG` (if set) wins over config `log_level` for the EnvFilter.
 pub fn init_tracing() {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
     use tracing_subscriber::EnvFilter;
 
     let cfg = resolve();
-    let filter = match EnvFilter::try_from_default_env() {
-        Ok(f) => f,
-        Err(_) => {
-            // Config may be a bare level ("info") or a full directive ("pinkcode=debug").
-            let directive = cfg.log_level.trim();
-            let filter_str = if directive.contains('=') || directive.contains(',') {
-                directive.to_string()
-            } else {
-                format!("pinkcode={directive},info")
-            };
-            EnvFilter::try_new(&filter_str).unwrap_or_else(|_| EnvFilter::new("info"))
-        }
-    };
+    let directives = tracing_directives(&cfg);
+    let filter = EnvFilter::try_new(&directives).unwrap_or_else(|_| EnvFilter::new("info"));
 
-    let result = tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(true)
-        .with_writer(std::io::stderr)
+    let log_file = prepare_log_file();
+    let file_layer = log_file.clone().map(|path| {
+        tracing_subscriber::fmt::layer()
+            .with_target(true)
+            .with_ansi(false)
+            .with_writer(AppendFile(Arc::new(path)))
+    });
+
+    // One filter above both layers rather than a filter per layer: the file must
+    // not carry a level of its own, or raising it lands `grok_agent` on disk.
+    let result = tracing_subscriber::registry()
+        .with(filter)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_target(true)
+                .with_writer(std::io::stderr),
+        )
+        .with(file_layer)
         .try_init();
 
     if let Err(error) = result {
         // Already initialized (tests / double run) — not fatal.
         eprintln!("[ztidalcode] tracing init skipped: {error}");
     } else {
+        if let Some(path) = log_file {
+            install_panic_hook(path.clone());
+            tracing::info!(path = %path.display(), "host log file");
+        }
         tracing::info!(
             log_level = %cfg.log_level,
             default_permission = ?cfg.default_permission_mode,
@@ -387,6 +565,100 @@ mod tests {
             finalize(defaults_layer()).default_permission_mode,
             "a fresh task must start at the configured default"
         );
+    }
+
+    /// The writer is the whole point of the file layer, and it is the piece the
+    /// fmt layer swallows the errors of: if it silently failed to create or to
+    /// append, the sink would look installed and stay empty.
+    #[test]
+    fn the_writer_creates_the_file_and_appends_to_it() {
+        use tracing_subscriber::fmt::MakeWriter;
+
+        let dir = temp_dir();
+        let path = dir.join(log_file_name(0, std::process::id()));
+        let make = AppendFile(Arc::new(path.clone()));
+
+        make.make_writer().write_all(b"first\n").expect("create");
+        make.make_writer().write_all(b"second\n").expect("append");
+
+        assert_eq!(
+            fs::read_to_string(&path).expect("read back"),
+            "first\nsecond\n",
+            "the second open must append, not truncate"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Two windows are two OS processes over one `~/.ztidalcode`; a shared file
+    /// name is what would make one of them the writer that silently stops.
+    #[test]
+    fn each_window_writes_to_a_file_of_its_own() {
+        assert_eq!(log_file_name(0, 4242), "app-1970-01-01-4242.log");
+        assert_ne!(log_file_name(0, 1), log_file_name(0, 2));
+    }
+
+    #[test]
+    fn prune_drops_aged_logs_and_leaves_everything_else() {
+        let dir = temp_dir();
+        let ours = dir.join(log_file_name(0, std::process::id()));
+        let other = dir.join("notes.txt");
+        fs::write(&ours, "x").expect("write log");
+        fs::write(&other, "x").expect("write other");
+
+        prune_old_logs(&dir, SystemTime::now() - Duration::from_secs(3600));
+        assert!(ours.is_file(), "a log inside the window must survive");
+
+        prune_old_logs(&dir, SystemTime::now() + Duration::from_secs(3600));
+        assert!(!ours.exists(), "an aged log must go");
+        assert!(other.is_file(), "only app-*.log is ours to delete");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_bare_level_raises_this_crate_and_pins_the_rest_at_info() {
+        assert_eq!(config_directives("debug"), "pinkcode=debug,info");
+        assert_eq!(config_directives(" trace "), "pinkcode=trace,info");
+        // A directive is the operator's own words — passed through untouched.
+        assert_eq!(
+            config_directives("pinkcode=trace,grok_agent=debug"),
+            "pinkcode=trace,grok_agent=debug"
+        );
+    }
+
+    /// The reason the file layer may share the resolved level: `acp::gateway`
+    /// pipes every line of `grok`'s stderr through
+    /// `tracing::debug!(target: "grok_agent", …)`, so turning the log up must
+    /// not put a teammate's whole agent session on disk. Asserted against a
+    /// real subscriber rather than the directive string, because the string is
+    /// only evidence if `EnvFilter` reads it the way the comment claims.
+    #[test]
+    fn turning_the_log_up_does_not_put_the_agents_stderr_on_disk() {
+        use tracing_subscriber::layer::SubscriberExt;
+        use tracing_subscriber::EnvFilter;
+
+        let dir = temp_dir();
+        let path = dir.join(log_file_name(0, std::process::id()));
+        let subscriber = tracing_subscriber::registry()
+            .with(EnvFilter::new(config_directives("debug")))
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_target(true)
+                    .with_ansi(false)
+                    .with_writer(AppendFile(Arc::new(path.clone()))),
+            );
+
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::debug!(target: "grok_agent", "a line of the agent's stderr");
+            tracing::warn!("a host warning");
+        });
+
+        let written = fs::read_to_string(&path).expect("the layer wrote a file");
+        assert!(written.contains("a host warning"), "{written}");
+        assert!(
+            !written.contains("a line of the agent's stderr"),
+            "the agent's stderr must not reach our disk: {written}"
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

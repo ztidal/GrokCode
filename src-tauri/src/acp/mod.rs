@@ -252,12 +252,27 @@ impl AcpClient {
         self.gateway.write_line(line)
     }
 
+    /// Runs once per connection, which is why both handshake records are taken
+    /// here: the reply is parsed nowhere else and nothing downstream sees the
+    /// fields serde drops.
     pub fn initialize(&self) -> Result<InitializeResult> {
-        self.call(
+        let raw = self.call_raw(
             "initialize",
             &InitializeParams::pinkcode(),
             Duration::from_secs(30),
-        )
+        )?;
+        // Not evaluated unless debug is on; see `initialize_reply_log_line` for
+        // why the body is worth a line and what is held back from it.
+        tracing::debug!(reply = %initialize_reply_log_line(&raw), "ACP initialize reply");
+        let initialized: InitializeResult = serde_json::from_value(raw)?;
+        // At info, not debug: the agent build is the first thing asked about a
+        // wire change, and by then the log is already written.
+        tracing::info!(
+            agent_version = initialized.agent_version().unwrap_or("unreported"),
+            agent_id = initialized.agent_id().unwrap_or("unreported"),
+            "ACP handshake complete"
+        );
+        Ok(initialized)
     }
 
     /// Complete the ACP authentication handshake when initialize advertises a

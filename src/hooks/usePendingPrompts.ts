@@ -2,9 +2,11 @@ import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import type {
   AgentUpdateEvent,
+  ManagedAgentInfo,
   PromptQueueState,
   TimelineItem,
 } from "../types";
+import { isLiveManagedStatus } from "../utils/managedStatus";
 
 /**
  * The message you have just submitted, until grok says something about it.
@@ -37,28 +39,56 @@ export interface PendingPrompt {
  *
  * `AgentManager::prompt` answers `accepted: true` as soon as it has handed the
  * text to a worker, before the RPC is attempted, so the send's promise resolves
- * whether or not the prompt reaches grok. When the transport dies mid-dispatch
- * not even a failure event is emitted. Silence past this point is the only
- * signal left, and a row that claims to be waiting forever is worse than none.
+ * whether or not the prompt reaches grok. A send the transport took down with
+ * it is settled by the status the agent leaves behind (`isConnectionLoss`);
+ * this is the last resort for one that neither lands nor visibly fails, and a
+ * row that claims to be waiting forever is worse than none.
  */
 export const ACK_TIMEOUT_MS = 45_000;
+
+/**
+ * Whether the agent dropped a connection it was holding, as opposed to not
+ * having one yet.
+ *
+ * A prompt lost to a dying transport emits nothing of its own: the completion
+ * handler in `AgentManager::dispatch_prompt` returns at the
+ * `connection_generation` / `reconnecting` guard without a
+ * `agent-prompt-complete`. But `handle_transport_closed` has already flipped
+ * the agent out of its live statuses and back to `starting` to reconnect, and
+ * that we do see.
+ *
+ * Leaving a live status is the whole test, and it is what separates a message
+ * that never arrived from one still on its way: a first connect only ever
+ * climbs out of `starting`, and a prompt queued behind a long turn leaves the
+ * agent `running` from submit to echo.
+ */
+export function isConnectionLoss(
+  before: ManagedAgentInfo["status"],
+  after: ManagedAgentInfo["status"],
+): boolean {
+  return isLiveManagedStatus(before) && !isLiveManagedStatus(after);
+}
 
 /**
  * Whether this submission is still the only sign of itself.
  *
  * `ackAt` is when grok last said anything about this task's queue; an echoed
  * user message is the other way a submission stops being invisible. Either one
- * means the real rows are carrying the message now.
+ * means the real rows are carrying the message now. `connectionLostAt` is the
+ * opposite word — the connection this one was dispatched on ended, so no row
+ * is coming for it at all.
  */
 export function isStillPending(
   pending: PendingPrompt | null,
   items: TimelineItem[],
   ackAt: number,
+  connectionLostAt: number,
   now: number,
 ): boolean {
   if (!pending) return false;
   if (now - pending.ts > ACK_TIMEOUT_MS) return false;
   if (ackAt > pending.ts) return false;
+  if (connectionLostAt > pending.ts) return false;
   return !items.some(
     (item) => item.kind === "user" && !item.pending && item.ts > pending.ts,
   );
