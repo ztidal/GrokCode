@@ -1,0 +1,20 @@
+/*
+ * The window's own ground, wherever there is no native material to show through.
+ *
+ * macOS is left transparent: it reads UnderWindowBackground from the system
+ * appearance and gets this right by itself. Windows cannot — its Acrylic is
+ * tinted cream by tauri.conf.json, a file the fork does not own (ADR-0001), and
+ * no runtime choice can move it, so every dark wash would sit on a light ground.
+ *
+ * Painting our own ground is also what makes the Acrylic underneath pointless,
+ * and DWM recomputes that blur on every frame the window moves. `lib.rs` clears
+ * the effect on Windows for exactly that reason; this rule is the half that
+ * makes clearing it invisible. The two belong together — dropping either one
+ * leaves a window that is see-through in the light theme, or one that stutters
+ * when dragged.
+ *
+ * One rule for every theme: `--rp-base` is the token each theme re-points.
+ */
+:root:not(.platform-macos-desktop) body {
+  background: var(--rp-base);
+}

@@ -89,12 +89,11 @@
 }
 
 /*
- * Painted on every platform, unlike Moon. Moon leaves macOS alone because
- * UnderWindowBackground reads the system appearance and gets dark right by
- * itself — but no system appearance is pure black, so here the native material
- * would quietly undo the whole theme. Windows needs it for the other reason:
- * Acrylic is tinted cream by tauri.conf.json, a file the fork does not own
- * (ADR-0001).
+ * window-ground.css already paints this everywhere except macOS, which it
+ * leaves to the native material. This theme is the one that cannot accept that:
+ * no system appearance is pure black, so UnderWindowBackground would quietly
+ * undo the whole theme. Hence the same declaration again, without the platform
+ * exemption.
  */
 :root[data-theme="puredark"] body {
   background: var(--rp-base);

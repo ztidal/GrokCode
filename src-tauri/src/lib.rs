@@ -641,7 +641,19 @@ pub fn run() {
             // Version only at runtime so conf/html stay product name (no version drift).
             if let Some(window) = app.get_webview_window("main") {
                 #[cfg(windows)]
-                window.set_decorations(false)?;
+                {
+                    window.set_decorations(false)?;
+                    // Acrylic asks DWM to blur whatever sits behind the window,
+                    // and it recomputes that blur on every frame the window
+                    // moves — which is why dragging stuttered. On Windows the
+                    // blur is never seen anyway: tauri.conf.json tints it cream
+                    // and cannot follow the theme (ADR-0001, upstream's file),
+                    // so the app paints its own opaque ground over the whole
+                    // window. The cost was being paid for an effect underneath
+                    // an opaque layer. macOS keeps its material, which the
+                    // system appearance drives correctly and cheaply.
+                    let _ = window.set_effects(None);
+                }
                 let name = app
                     .config()
                     .product_name
