@@ -648,6 +648,19 @@ async fn clipboard_file_paths() -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// A `data:` URL thumbnail for an attached image, or null for no thumbnail.
+///
+/// Null covers "not an image", "too big to preview" and "unreadable" alike: the
+/// composer shows the file by name in every one of those cases, so there is
+/// nothing for it to tell apart.
+#[tauri::command]
+async fn read_image_preview(path: String) -> Option<String> {
+    tauri::async_runtime::spawn_blocking(move || clipboard_paste::image_preview(&path))
+        .await
+        .ok()
+        .flatten()
+}
+
 /// Write a pasted bitmap out and answer with its path.
 ///
 /// Only for clipboard data with no file behind it — a screenshot. Files copied
@@ -817,6 +830,7 @@ pub fn run() {
             trash_session,
             clipboard_file_paths,
             save_pasted_image,
+            read_image_preview,
             list_session_titles,
             set_session_title,
         ])

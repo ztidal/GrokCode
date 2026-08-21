@@ -1175,3 +1175,112 @@ button.user-question-option:hover:not(:disabled),
     transform: none;
   }
 }
+
+/* ── Attachments waiting to go with the next prompt ── */
+
+.attachment-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px var(--composer-inline-pad) 0;
+}
+
+/*
+ * Mostly picture. The name is a caption under it rather than the chip itself,
+ * so a row of attachments reads as thumbnails and not as a list of paths — the
+ * reason for showing them instead of pasting the paths into the message.
+ */
+.attachment-chip {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 76px;
+  padding: 5px 5px 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+}
+
+.attachment-chip:hover {
+  border-color: var(--border-strong);
+}
+
+.attachment-chip-image {
+  width: 64px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--hl-low);
+  display: block;
+}
+
+/* No picture: the extension, which says more at a glance than a generic icon. */
+.attachment-chip-ext {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 44px;
+  border-radius: 4px;
+  background: var(--hl-low);
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.attachment-chip-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/*
+ * Over the corner, not beside the name: the chip is mostly picture, and a
+ * control that moves with the length of a filename is one you have to hunt for.
+ * Visible at rest — an attachment you cannot see how to remove is worse than a
+ * little chrome, and the row is never long.
+ */
+.attachment-chip-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-menu);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.attachment-chip-remove:hover {
+  background: var(--danger-dim);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.attachment-chip-remove:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attachment-chip-remove {
+    transition: none;
+  }
+}

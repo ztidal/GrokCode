@@ -554,6 +554,16 @@ export async function savePastedImage(
 }
 
 /**
+ * A `data:` URL thumbnail for an attached image, or null for none.
+ *
+ * Null covers "not an image", "too big to preview" and "unreadable" alike — the
+ * chip shows the file by name in every one of those cases.
+ */
+export async function readImagePreview(path: string): Promise<string | null> {
+  return invoke<string | null>("read_image_preview", { path });
+}
+
+/**
  * The names people have given their sessions, session id → name.
  *
  * Read once when a window starts. These live beside the other host-side

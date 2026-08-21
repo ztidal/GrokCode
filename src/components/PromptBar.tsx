@@ -8,7 +8,8 @@ import type {
 } from "../types";
 import { PERMISSION_MODE_OPTIONS, SESSION_MODE_OPTIONS } from "../types";
 import { usePromptHistoryBrowse } from "../hooks/usePromptHistoryBrowse";
-import { usePastedPaths } from "../hooks/usePastedPaths";
+import { composePrompt, useAttachments } from "../hooks/useAttachments";
+import { AttachmentChips } from "./AttachmentChips";
 import { filterSlashCommands } from "../utils/slashCommands";
 import {
   applySessionModeToPrompt,
@@ -78,32 +79,7 @@ export function PromptBar({
   const [menuOpen, setMenuOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  /**
-   * Drop a snippet in at the caret, spaced off whatever is already there.
-   *
-   * Paths arrive from a paste, which is a thing that happens mid-sentence — so
-   * this appends where the caret is rather than at the end, and leaves the
-   * caret after what it inserted so typing carries on.
-   */
-  const insertAtCaret = useCallback((snippet: string) => {
-    const el = textareaRef.current;
-    setText((current) => {
-      const start = el?.selectionStart ?? current.length;
-      const end = el?.selectionEnd ?? current.length;
-      const before = current.slice(0, start);
-      const piece = (before && !/\s$/.test(before) ? " " : "") + snippet + " ";
-      const next = before + piece + current.slice(end);
-      // After React has painted the new value, or the caret lands in the old one.
-      queueMicrotask(() => {
-        const caret = start + piece.length;
-        el?.focus();
-        el?.setSelectionRange(caret, caret);
-      });
-      return next;
-    });
-  }, []);
-
-  const onPastePaths = usePastedPaths(insertAtCaret);
+  const attachments = useAttachments();
   const menuRef = useRef<HTMLDivElement>(null);
   /**
    * After insert / Esc, keep the menu closed until the user types again.
@@ -220,14 +196,18 @@ export function PromptBar({
 
   function sendIfReady() {
     const trimmed = text.trim();
-    if (!trimmed || stopping || busy) return;
+    // Attachments alone are a message: pasting a screenshot and pressing enter
+    // means "look at this", and refusing it would be pedantry.
+    if ((!trimmed && attachments.items.length === 0) || stopping || busy) return;
+    const withFiles = composePrompt(trimmed, attachments.items);
     // First non-local message auto-connects ACP in App.handleSend.
-    const payload = applySessionModeToPrompt(sessionMode, trimmed);
+    const payload = applySessionModeToPrompt(sessionMode, withFiles);
     // Record wire text (matches timeline user cards after mode prefix).
     history.recordSent(payload);
     history.detach();
     onSend(payload);
     setText("");
+    attachments.clear();
     setMenuOpen(false);
     suppressMenuRef.current = false;
   }
@@ -293,6 +273,10 @@ export function PromptBar({
             ))}
           </div>
         )}
+        <AttachmentChips
+          items={attachments.items}
+          onRemove={attachments.remove}
+        />
         <textarea
           ref={textareaRef}
           className="prompt-input"
@@ -310,7 +294,7 @@ export function PromptBar({
           }
           value={text}
           disabled={stopping || busy}
-          onPaste={onPastePaths}
+          onPaste={attachments.onPaste}
           onChange={(e) => {
             const next = e.target.value;
             // Typing while browsing detaches (keep populated text).

@@ -135,6 +135,66 @@ pub fn save_pasted_image(data_base64: &str, mime: &str) -> Result<String, String
     Ok(path.display().to_string())
 }
 
+/// Biggest image the composer will show a thumbnail for.
+///
+/// A preview travels to the webview as a data URL, so it costs its own size
+/// again in base64 and then sits in the DOM. Past this the chip shows the file
+/// without a picture, which is a better trade than a composer that stutters
+/// because someone attached a screenshot of a 5K display.
+const PREVIEW_MAX_BYTES: u64 = 6 * 1024 * 1024;
+
+/// True for the extensions a webview `<img>` can actually paint.
+///
+/// By extension, not by sniffing: this only decides whether to *try* a preview,
+/// and a wrong guess costs a chip without a picture rather than anything worse.
+fn looks_like_image(path: &std::path::Path) -> bool {
+    let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+        return false;
+    };
+    matches!(
+        ext.to_ascii_lowercase().as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "svg" | "avif" | "ico"
+    )
+}
+
+fn mime_for(path: &std::path::Path) -> &'static str {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "svg" => "image/svg+xml",
+        "avif" => "image/avif",
+        "ico" => "image/x-icon",
+        _ => "image/png",
+    }
+}
+
+/// A `data:` URL for an attached image, or `None` when there should be no
+/// thumbnail — not an image, too big, or unreadable.
+///
+/// `None` is never an error the composer has to explain: the chip simply shows
+/// the file by name, which is what a non-image attachment looks like anyway.
+pub fn image_preview(path: &str) -> Option<String> {
+    let path = std::path::Path::new(path);
+    if !looks_like_image(path) {
+        return None;
+    }
+    let size = std::fs::metadata(path).ok()?.len();
+    if size == 0 || size > PREVIEW_MAX_BYTES {
+        return None;
+    }
+    let bytes = std::fs::read(path).ok()?;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Some(format!("data:{};base64,{encoded}", mime_for(path)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,6 +226,35 @@ mod tests {
         assert!(path.is_file());
         assert_eq!(path.parent(), Some(pasted_dir().as_path()));
         assert_eq!(path.extension().and_then(|e| e.to_str()), Some("png"));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn only_paintable_extensions_get_a_thumbnail() {
+        use std::path::Path;
+        for yes in ["a.png", "b.JPG", "c.jpeg", "d.webp", "e.svg", "f.Gif"] {
+            assert!(looks_like_image(Path::new(yes)), "{yes}");
+        }
+        for no in ["a.rs", "b.pdf", "c.zip", "noextension", "d.png.txt"] {
+            assert!(!looks_like_image(Path::new(no)), "{no}");
+        }
+    }
+
+    #[test]
+    fn a_missing_or_oversized_file_simply_has_no_thumbnail() {
+        // None is not an error the composer explains — the chip shows a name.
+        assert!(image_preview(r"Z:\nowhere\gone.png").is_none());
+        assert!(image_preview(r"Z:\nowhere\notes.txt").is_none());
+    }
+
+    #[test]
+    fn an_image_on_disk_comes_back_as_a_data_url() {
+        let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+        let path = save_pasted_image(png, "image/png").expect("write");
+        let url = image_preview(&path).expect("preview");
+        assert!(url.starts_with("data:image/png;base64,"), "{url}");
+        // The payload is the file, not a re-encode of something else.
+        assert!(url.ends_with(png), "{url}");
         let _ = std::fs::remove_file(path);
     }
 
