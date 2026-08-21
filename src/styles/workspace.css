@@ -1038,7 +1038,7 @@
   position: relative;
   /* Left pad clears the mark, which is positioned rather than inline so the
      title keeps its own ellipsis measurement. */
-  padding: 5px 6px 5px 19px;
+  padding: 5px 6px 5px 26px;
   min-width: 0;
 }
 
@@ -1048,7 +1048,7 @@
  */
 .session-mark {
   position: absolute;
-  left: 6px;
+  left: 12px;
   /*
    * Centred on the title's first line, which is why it hangs off `.card-body`
    * rather than the card: a card with a status line above the body would leave
@@ -1059,7 +1059,7 @@
    * mark. It cannot ride on the title as a ::before, because a selected title
    * paints itself with background-clip: text and would clip the mark away too.
    */
-  top: 10px;
+  top: 9px;
   width: 6px;
   height: 6px;
   box-sizing: border-box;
@@ -1124,7 +1124,7 @@
 
 .card-title {
   font-weight: 500;
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: -0.01em;
   line-height: 1.3;
   color: var(--text);
