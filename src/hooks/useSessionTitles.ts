@@ -1,78 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
+import { listSessionTitles, setSessionTitle } from "../api";
 import type { SessionCard } from "../types";
 
-/** Fork-owned key — upstream stores nothing under this prefix (ADR-0003). */
-const TITLES_KEY = "ztidalcode.sessions.titles";
-
 /**
- * Decode the stored overrides: a JSON object of session id → non-empty name,
- * anything else meaning "nothing renamed". A corrupt entry costs the names and
- * nothing else — the sessions on disk never learn about any of this.
- */
-export function parseStoredTitles(raw: string | null): Map<string, string> {
-  if (!raw) return new Map();
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return new Map();
-    }
-    const out = new Map<string, string>();
-    for (const [id, name] of Object.entries(parsed as Record<string, unknown>)) {
-      if (id !== "" && typeof name === "string" && name.trim() !== "") {
-        out.set(id, name.trim());
-      }
-    }
-    return out;
-  } catch {
-    return new Map(); /* corrupt value — same as never having renamed anything */
-  }
-}
-
-/** Key-sorted so an unchanged map never rewrites the entry with a new spelling. */
-export function serializeTitles(titles: ReadonlyMap<string, string>): string {
-  const out: Record<string, string> = {};
-  for (const id of [...titles.keys()].sort()) out[id] = titles.get(id) as string;
-  return JSON.stringify(out);
-}
-
-/**
- * Apply one rename, always a new map so React sees the change.
+ * What a typed name resolves to: the name itself, or `null` for "no override".
  *
- * Clearing the field is how you undo a rename, so blank input **removes** the
- * override rather than storing an empty name — a card with no title at all
- * would be unreachable, and there would be no way back to the agent's own.
- * A name equal to the original is stored as nothing for the same reason: the
- * override would then silently pin a title that the agent is still free to
- * change underneath it.
+ * Blank is how the field says "give me the agent's title back", so it clears
+ * rather than storing an empty name — a card with no title at all would be
+ * unreachable. A name equal to the agent's clears for a different reason: the
+ * override would otherwise pin a title the agent is still free to change
+ * underneath it, and nothing would look wrong until it did.
+ *
+ * Exported for unit tests.
  */
-export function setTitleOverride(
-  titles: ReadonlyMap<string, string>,
-  id: string,
-  name: string,
-  original: string,
-): Map<string, string> {
-  const next = new Map(titles);
-  if (id === "") return next;
+export function resolveOverride(name: string, original: string): string | null {
   const trimmed = name.trim();
-  if (trimmed === "" || trimmed === original.trim()) next.delete(id);
-  else next.set(id, trimmed);
-  return next;
-}
-
-function readStored(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null; /* storage disabled */
-  }
-}
-
-function writeStored(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    /* storage disabled — a name is a preference, not state we must keep */
-  }
+  if (trimmed === "" || trimmed === original.trim()) return null;
+  return trimmed;
 }
 
 export interface SessionTitlesApi {
@@ -91,23 +35,33 @@ export interface SessionTitlesApi {
  * session on disk is `grok`'s (ADR-0001), and the title it generates keeps
  * updating underneath whatever we show. Clearing the name brings it back.
  *
- * Per-machine, so localStorage rather than a Rust command — the same call the
- * pins made, and for the same reason: nothing about what one person calls a
- * card belongs in agent state. The store outlives updates (it sits in the
- * WebView2 profile, not in the install directory) but not a new machine, which
- * is the trade a label is worth and a session is not.
+ * The names live host-side (`~/.ztidalcode/session_titles.json`), unlike the
+ * pins beside them. A pin is a preference — cheap to lose, cheaper to redo — so
+ * localStorage is the right size for it. A name is something someone typed, and
+ * localStorage is a cache: it batches to disk, so a window that is killed
+ * rather than closed loses the last few writes, and two windows each hold the
+ * whole map and overwrite each other. Both were happening.
  *
- * Ids are never pruned against the loaded page: the sidebar pages, so a name
- * for a session that has not been fetched yet is still a live name.
+ * State here is a mirror, updated optimistically so the card repaints on the
+ * keystroke, then replaced by the host's answer — which is the whole map, so a
+ * rename made in another window arrives with the next one made here.
  */
 export function useSessionTitles(): SessionTitlesApi {
-  const [titles, setTitles] = useState<Map<string, string>>(() =>
-    parseStoredTitles(readStored(TITLES_KEY)),
-  );
+  const [titles, setTitles] = useState<Map<string, string>>(() => new Map());
 
   useEffect(() => {
-    writeStored(TITLES_KEY, serializeTitles(titles));
-  }, [titles]);
+    let cancelled = false;
+    void listSessionTitles()
+      .then((map) => {
+        if (!cancelled) setTitles(new Map(Object.entries(map)));
+      })
+      .catch(() => {
+        // No names is the honest fallback: every card keeps the agent's title.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const displayTitle = useCallback(
     (card: SessionCard) => titles.get(card.id) ?? card.title,
@@ -120,9 +74,21 @@ export function useSessionTitles(): SessionTitlesApi {
   );
 
   const rename = useCallback((card: SessionCard, name: string) => {
-    setTitles((previous) =>
-      setTitleOverride(previous, card.id, name, card.title),
-    );
+    const next = resolveOverride(name, card.title);
+    setTitles((previous) => {
+      const optimistic = new Map(previous);
+      if (next === null) optimistic.delete(card.id);
+      else optimistic.set(card.id, next);
+      return optimistic;
+    });
+    void setSessionTitle(card.id, next)
+      .then((map) => setTitles(new Map(Object.entries(map))))
+      .catch(() => {
+        // The write failed; the host is the authority, so take its word back.
+        void listSessionTitles()
+          .then((map) => setTitles(new Map(Object.entries(map))))
+          .catch(() => {});
+      });
   }, []);
 
   return { displayTitle, originalTitle, rename };

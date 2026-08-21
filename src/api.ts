@@ -530,6 +530,35 @@ export async function startupSession(): Promise<string | null> {
 }
 
 /**
+ * The names people have given their sessions, session id → name.
+ *
+ * Read once when a window starts. These live beside the other host-side
+ * preferences rather than in localStorage: a name is something someone typed,
+ * and the browser store batches to disk — a window that is killed rather than
+ * closed takes the last few writes with it.
+ */
+export async function listSessionTitles(): Promise<Record<string, string>> {
+  return invoke<Record<string, string>>("list_session_titles");
+}
+
+/**
+ * Rename one session, or with `null`, give the agent's own title back.
+ *
+ * Resolves with the whole map, not an acknowledgement: the host re-reads under
+ * a lock before writing, so the answer carries anything another window renamed
+ * meanwhile.
+ */
+export async function setSessionTitle(
+  sessionId: string,
+  title: string | null,
+): Promise<Record<string, string>> {
+  return invoke<Record<string, string>>("set_session_title", {
+    sessionId,
+    title,
+  });
+}
+
+/**
  * Move a session out of the sidebar and out of `grok`'s reach.
  *
  * Nothing is deleted: the host moves the session's directory into the store's

@@ -235,6 +235,31 @@ export function TimelinePanel({
     scrollToEnd("auto");
   }, [virtual.totalHeight, virtual.active]);
 
+  /*
+   * Content growing in place, which is most of a streaming turn.
+   *
+   * The two effects above fire when items are added and when the virtual window
+   * remeasures. Neither happens while a message already on screen is still
+   * being written into — and on a session short enough that virtualising never
+   * switches on, the second never fires at all. Watching the list's own box
+   * catches every way it can get taller, including a tool block expanding or an
+   * image finishing its load.
+   *
+   * Safe against a feedback loop: scrolling the parent does not change the size
+   * of the element being observed.
+   */
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (stickToBottom.current) scrollToEnd("auto");
+    });
+    observer.observe(root);
+    return () => observer.disconnect();
+    // Refs only inside, so the first render's closure stays correct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!pinBottomSeq) return;
     stickToBottom.current = true;

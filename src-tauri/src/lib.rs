@@ -19,6 +19,7 @@ mod project_groups;
 mod proxy;
 mod rpc_handler;
 mod session_noise;
+mod session_titles;
 mod session_trash;
 mod session_usage;
 mod sessions;
@@ -635,6 +636,32 @@ fn startup_session() -> Option<String> {
     multi_instance::startup_session()
 }
 
+/// The names people have given their sessions, session id → name.
+///
+/// Read once when a window starts. Absent or unreadable answers an empty map:
+/// a preference file is not worth failing a window over.
+#[tauri::command]
+async fn list_session_titles() -> std::collections::BTreeMap<String, String> {
+    tauri::async_runtime::spawn_blocking(session_titles::load)
+        .await
+        .unwrap_or_default()
+}
+
+/// Rename one session, or with no title, give the agent's own back.
+///
+/// Answers the whole map rather than an acknowledgement: the write re-reads
+/// under a lock, so what comes back includes anything another window renamed
+/// while this one was not looking.
+#[tauri::command]
+async fn set_session_title(
+    session_id: String,
+    title: Option<String>,
+) -> Result<std::collections::BTreeMap<String, String>, String> {
+    tauri::async_runtime::spawn_blocking(move || session_titles::set(&session_id, title))
+        .await
+        .map_err(|e| format!("rename task failed: {e}"))?
+}
+
 /// Move a session out of the sidebar and out of `grok`'s reach, reversibly.
 ///
 /// Named for what it does rather than for the menu item that calls it: nothing
@@ -765,6 +792,8 @@ pub fn run() {
             open_new_window,
             startup_session,
             trash_session,
+            list_session_titles,
+            set_session_title,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
