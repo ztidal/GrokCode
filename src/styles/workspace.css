@@ -1086,7 +1086,7 @@
 }
 
 .session-card.state-open .session-mark {
-  border-color: var(--rp-iris);
+  border-color: var(--accent);
   opacity: 1;
 }
 

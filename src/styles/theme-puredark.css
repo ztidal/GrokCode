@@ -1,6 +1,11 @@
 /*
  * Pure Dark — Rosé Pine Moon's accents on a true-black, neutral ground.
  *
+ * Warm Gold activates every block here too: it is this exact ground — the
+ * same solved greys, spec and shadows — with warm accents layered on in
+ * theme-warmgold.css. Grouped selectors rather than a copied ramp, so the
+ * two cannot drift; warmgold's own file carries only what differs.
+ *
  * Same contract as theme-dark.css: only the raw --rp-* tier is re-pointed, and
  * the semantic and component tiers in tokens.css derive from it and follow for
  * free. Everything after the palette is a token that cannot survive a plain
@@ -25,7 +30,8 @@
  *    on Moon even though the ground sits 16 ΔL* lower. Re-solve, do not nudge.
  */
 
-:root[data-theme="puredark"] {
+:root[data-theme="puredark"],
+:root[data-theme="warmgold"] {
   --color-scheme: dark;
 
   /* ── Neutral ramp on a literal black ──────────────────────── */
@@ -97,7 +103,8 @@
  * undo the whole theme. Hence the same declaration again, without the platform
  * exemption.
  */
-:root[data-theme="puredark"] body {
+:root[data-theme="puredark"],
+:root[data-theme="warmgold"] body {
   background: var(--rp-base);
 }
 
@@ -106,8 +113,10 @@
  * the scrim's whole job here is dimming the colour still showing through it;
  * it needs to be heavier to buy the same "the app went away".
  */
-:root[data-theme="puredark"] .modal-backdrop,
-:root[data-theme="puredark"] .drag-dialog-overlay {
+:root[data-theme="puredark"],
+:root[data-theme="warmgold"] .modal-backdrop,
+:root[data-theme="puredark"],
+:root[data-theme="warmgold"] .drag-dialog-overlay {
   background: rgb(0 0 0 / 0.62);
 }
 
@@ -117,12 +126,19 @@
  * those rules actually meant and let the field be the ground the dialog floats
  * above — the border tier is what separates them.
  */
-:root[data-theme="puredark"] .field input,
-:root[data-theme="puredark"] .field textarea,
-:root[data-theme="puredark"] .field-select,
-:root[data-theme="puredark"] .update-notes-body,
-:root[data-theme="puredark"] .drag-dialog-body,
-:root[data-theme="puredark"] .user-question-other-input,
-:root[data-theme="puredark"] .user-question-preview {
+:root[data-theme="puredark"],
+:root[data-theme="warmgold"] .field input,
+:root[data-theme="puredark"],
+:root[data-theme="warmgold"] .field textarea,
+:root[data-theme="puredark"],
+:root[data-theme="warmgold"] .field-select,
+:root[data-theme="puredark"],
+:root[data-theme="warmgold"] .update-notes-body,
+:root[data-theme="puredark"],
+:root[data-theme="warmgold"] .drag-dialog-body,
+:root[data-theme="puredark"],
+:root[data-theme="warmgold"] .user-question-other-input,
+:root[data-theme="puredark"],
+:root[data-theme="warmgold"] .user-question-preview {
   background: var(--rp-base);
 }

@@ -1,0 +1,58 @@
+/*
+ * Warm Gold — Pure Dark's ground with the hero roles turned warm.
+ *
+ * The ground is not defined here. Every base block in theme-puredark.css
+ * activates for this theme too (grouped selectors), so the solved neutral
+ * ramp, spec, shadows, scrim and field recesses arrive without a copy that
+ * could drift. This file is only the difference: what was blue-and-foam
+ * becomes gold-and-rose.
+ *
+ * Import order matters and is load-bearing: this file follows
+ * theme-puredark.css in App.css. The two files' blocks tie on specificity
+ * ((0,2,0) each), so these deltas win by coming later — reorder the imports
+ * and the theme silently collapses back to Pure Dark.
+ *
+ * What turns warm, and why only this much:
+ *
+ * - The brand slot. --accent derives from --rp-brand in tokens.css, so
+ *   re-pointing the raw slot at Rose warms every accent surface at once —
+ *   branch chips, context meter, modified marks, focus rings — and the usage
+ *   bars' lower gradient stop with them.
+ * - The hero roles. Titles and the usage bars' upper stop go Gold, and the
+ *   title gradient becomes gold → rose, a neighbouring-hue ramp like the cool
+ *   theme's blue → foam. (A blue → gold gradient greys out in the middle,
+ *   which is why the gradient is overridden rather than left to recompute.)
+ * - Your own rows. kind-user goes Gold: your words warm against the agent's
+ *   cool foam. Subagent and plan follow, exactly the trio that shared one
+ *   colour before, so no new collision is created — and Gold was already
+ *   task's colour, a sharing the cool theme accepts between user and nothing.
+ *
+ * Everything else — agent foam, shell pine, tool rose, danger love — is
+ * untouched: the point is a warm identity, not a re-audit of every role.
+ */
+
+:root[data-theme="warmgold"] {
+  /* ── The brand slot, warmed (accent, ctx chips, branch, bars' base) ── */
+  --rp-brand: #ea9a97;
+  --rp-brand-rgb: 234 154 151;
+
+  /* ── Hero: titles and the usage bars' upper stop ─────────────────── */
+  --title-selected: var(--rp-gold);
+  --title-selected-rgb: var(--rp-gold-rgb);
+  --title-gradient: linear-gradient(
+    90deg,
+    var(--rp-gold) 0%,
+    var(--rp-rose) 100%
+  );
+
+  /* ── Your rows: warm against the agent's cool ────────────────────── */
+  --kind-user: var(--rp-gold);
+  --kind-user-dim: rgb(var(--rp-gold-rgb) / 0.18);
+  --kind-user-rgb: var(--rp-gold-rgb);
+  --kind-subagent: var(--rp-gold);
+  --kind-subagent-dim: rgb(var(--rp-gold-rgb) / 0.14);
+  --kind-subagent-rgb: var(--rp-gold-rgb);
+  --kind-plan: var(--rp-gold);
+  --kind-plan-dim: rgb(var(--rp-gold-rgb) / 0.16);
+  --kind-plan-rgb: var(--rp-gold-rgb);
+}

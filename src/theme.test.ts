@@ -8,7 +8,11 @@ import {
   DEFAULT_CHOICE,
 } from "./theme";
 
-const THEME_CSS = ["./styles/theme-dark.css", "./styles/theme-puredark.css"]
+const THEME_CSS = [
+  "./styles/theme-dark.css",
+  "./styles/theme-puredark.css",
+  "./styles/theme-warmgold.css",
+]
   .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
   .join("\n");
 
@@ -82,7 +86,11 @@ describe("every stamped choice has paint", () => {
   it("activates a palette block", () => {
     expect(STAMPED.length).toBeGreaterThan(0);
     for (const choice of STAMPED) {
-      expect(THEME_CSS).toContain(`:root[data-theme="${choice}"] {`);
+      // Either its own block or a grouped selector: warmgold shares pure
+      // dark's ground blocks, so puredark's activations end in a comma there.
+      expect(THEME_CSS).toMatch(
+        new RegExp(`:root\\[data-theme="${choice}"\\]\\s*[,{]`),
+      );
     }
   });
 

@@ -12,6 +12,7 @@ const LABELS: Record<ThemeChoice, string> = {
   light: "Light",
   dark: "Dark",
   puredark: "Pure Dark",
+  warmgold: "Warm Gold",
   system: "System",
 };
 

@@ -8,15 +8,22 @@
  * any of this runs — the app's CSP (`script-src 'self'`) forbids the inline
  * <script> that would otherwise be the usual pre-paint hook.
  *
- * 'puredark' is the one choice the OS can never make for you: there is no
- * `prefers-color-scheme` value meaning "pure black", so it exists only as a
- * stamped attribute and never comes back out of `resolveTheme('system', …)`.
+ * 'puredark' and 'warmgold' are choices the OS can never make for you: no
+ * `prefers-color-scheme` value means "pure black" (warmgold is that black with
+ * warm accents), so they exist only as stamped attributes and never come back
+ * out of `resolveTheme('system', …)`.
  */
 
 /** Fork-owned key — upstream stores nothing under this prefix (ADR-0003). */
 const THEME_KEY = "ztidalcode.theme";
 
-export const THEME_CHOICES = ["light", "dark", "puredark", "system"] as const;
+export const THEME_CHOICES = [
+  "light",
+  "dark",
+  "puredark",
+  "warmgold",
+  "system",
+] as const;
 
 /**
  * What an unconfigured install paints. Not 'system': the app is a long-running

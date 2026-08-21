@@ -10,7 +10,8 @@
  *   :root[data-theme="dark"]                   an explicit choice (theme.ts)
  *   @media (prefers-color-scheme: dark)
  *     :root:not([data-theme="light"])
- *          :not([data-theme="puredark"])       'system', with no JS at all
+ *          :not([data-theme="puredark"])
+ *          :not([data-theme="warmgold"])       'system', with no JS at all
  * Equal specificity, so precedence comes from the selectors rather than order:
  * every explicit choice excludes itself from the second and only 'dark' matches
  * the first, and 'system' writes no attribute so the media query alone decides —
@@ -107,7 +108,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not([data-theme="puredark"]) {
+  :root:not([data-theme="light"]):not([data-theme="puredark"]):not([data-theme="warmgold"]) {
     --color-scheme: dark;
 
     /* ── Official Rosé Pine Moon palette ───────────────────────── */
@@ -157,18 +158,18 @@
     --shadow-text-hairline: 0 1px 0 rgb(0 0 0 / 0.24);
   }
 
-  :root:not([data-theme="light"]):not([data-theme="puredark"]) .modal-backdrop,
-  :root:not([data-theme="light"]):not([data-theme="puredark"]) .drag-dialog-overlay {
+  :root:not([data-theme="light"]):not([data-theme="puredark"]):not([data-theme="warmgold"]) .modal-backdrop,
+  :root:not([data-theme="light"]):not([data-theme="puredark"]):not([data-theme="warmgold"]) .drag-dialog-overlay {
     background: rgb(0 0 0 / 0.55);
   }
 
-  :root:not([data-theme="light"]):not([data-theme="puredark"]) .field input,
-  :root:not([data-theme="light"]):not([data-theme="puredark"]) .field textarea,
-  :root:not([data-theme="light"]):not([data-theme="puredark"]) .field-select,
-  :root:not([data-theme="light"]):not([data-theme="puredark"]) .update-notes-body,
-  :root:not([data-theme="light"]):not([data-theme="puredark"]) .drag-dialog-body,
-  :root:not([data-theme="light"]):not([data-theme="puredark"]) .user-question-other-input,
-  :root:not([data-theme="light"]):not([data-theme="puredark"]) .user-question-preview {
+  :root:not([data-theme="light"]):not([data-theme="puredark"]):not([data-theme="warmgold"]) .field input,
+  :root:not([data-theme="light"]):not([data-theme="puredark"]):not([data-theme="warmgold"]) .field textarea,
+  :root:not([data-theme="light"]):not([data-theme="puredark"]):not([data-theme="warmgold"]) .field-select,
+  :root:not([data-theme="light"]):not([data-theme="puredark"]):not([data-theme="warmgold"]) .update-notes-body,
+  :root:not([data-theme="light"]):not([data-theme="puredark"]):not([data-theme="warmgold"]) .drag-dialog-body,
+  :root:not([data-theme="light"]):not([data-theme="puredark"]):not([data-theme="warmgold"]) .user-question-other-input,
+  :root:not([data-theme="light"]):not([data-theme="puredark"]):not([data-theme="warmgold"]) .user-question-preview {
     background: var(--rp-base);
   }
 }

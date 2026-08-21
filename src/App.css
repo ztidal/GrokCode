@@ -13,3 +13,6 @@
 @import "./styles/window-ground.css";
 @import "./styles/theme-dark.css";
 @import "./styles/theme-puredark.css";
+/* Must follow theme-puredark.css: warmgold's deltas tie it on specificity
+   and win only by coming later. */
+@import "./styles/theme-warmgold.css";

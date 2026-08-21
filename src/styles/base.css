@@ -78,7 +78,7 @@ input {
   line-height: inherit;
 }
 
-/* Rose → iris → foam gradient text (see --title-gradient). */
+/* Blue → foam gradient text (see --title-gradient). */
 .text-title-gradient {
   background: var(--title-gradient);
   -webkit-background-clip: text;
@@ -112,7 +112,7 @@ pre {
     ),
     radial-gradient(
       circle at 92% 100%,
-      rgb(var(--rp-iris-rgb) / 0.07),
+      rgb(var(--rp-brand-rgb) / 0.07),
       transparent 42%
     );
 }

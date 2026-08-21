@@ -97,8 +97,11 @@
   --action-primary: var(--rp-pine);
   --action-primary-rgb: var(--rp-pine-rgb);
   --on-action-primary: var(--rp-surface);
-  --title-selected: var(--rp-iris);
-  --title-selected-rgb: var(--rp-iris-rgb);
+  /* Foam, not Iris: the accent is already blue and Live is foam, so the
+     hero reads as one cool family instead of a purple stranger between two
+     blues. Iris keeps its palette slot but no role reaches for it. */
+  --title-selected: var(--rp-foam);
+  --title-selected-rgb: var(--rp-foam-rgb);
   --live: var(--rp-foam);
   --live-rgb: var(--rp-foam-rgb);
   --live-dim: rgb(var(--live-rgb) / 0.15);
@@ -122,8 +125,8 @@
   --del: var(--rp-love);
 
   /* ── Timeline kinds (edge / wash accents; body text stays Text) ─ */
-  --kind-user: var(--rp-iris);
-  --kind-user-dim: rgb(var(--rp-iris-rgb) / 0.18);
+  --kind-user: var(--rp-brand);
+  --kind-user-dim: rgb(var(--rp-brand-rgb) / 0.18);
   --kind-agent: var(--rp-foam);
   --kind-agent-dim: rgb(var(--rp-foam-rgb) / 0.16);
   --kind-thought: var(--rp-muted);
@@ -132,27 +135,27 @@
   --kind-tool-dim: rgb(var(--rp-rose-rgb) / 0.14);
   --kind-shell: var(--rp-pine);
   --kind-shell-dim: rgb(var(--rp-pine-rgb) / 0.12);
-  --kind-subagent: var(--rp-iris);
-  --kind-subagent-dim: rgb(var(--rp-iris-rgb) / 0.14);
+  --kind-subagent: var(--rp-brand);
+  --kind-subagent-dim: rgb(var(--rp-brand-rgb) / 0.14);
   --kind-task: var(--rp-gold);
   --kind-task-dim: rgb(var(--rp-gold-rgb) / 0.14);
-  /* Plan shares Iris with user/subagent: every other role is spoken for, and
+  /* Plan shares Brand with user/subagent: every other role is spoken for, and
      the plan dialog is never on screen beside a user or subagent edge. */
-  --kind-plan: var(--rp-iris);
-  --kind-plan-dim: rgb(var(--rp-iris-rgb) / 0.16);
+  --kind-plan: var(--rp-brand);
+  --kind-plan-dim: rgb(var(--rp-brand-rgb) / 0.16);
   --kind-event: var(--rp-subtle);
   --kind-event-dim: rgb(var(--rp-subtle-rgb) / 0.14);
   --kind-unknown: var(--rp-muted);
   --kind-unknown-dim: rgb(var(--rp-muted-rgb) / 0.12);
   /* Per-kind RGB for timeline washes / accent bars (must match above) */
-  --kind-user-rgb: var(--rp-iris-rgb);
+  --kind-user-rgb: var(--rp-brand-rgb);
   --kind-agent-rgb: var(--rp-foam-rgb);
   --kind-thought-rgb: var(--rp-muted-rgb);
   --kind-tool-rgb: var(--rp-rose-rgb);
   --kind-shell-rgb: var(--rp-pine-rgb);
-  --kind-subagent-rgb: var(--rp-iris-rgb);
+  --kind-subagent-rgb: var(--rp-brand-rgb);
   --kind-task-rgb: var(--rp-gold-rgb);
-  --kind-plan-rgb: var(--rp-iris-rgb);
+  --kind-plan-rgb: var(--rp-brand-rgb);
   --kind-event-rgb: var(--rp-subtle-rgb);
   --kind-unknown-rgb: var(--rp-muted-rgb);
 
@@ -165,11 +168,10 @@
   --shadow-md: 0 6px 18px rgb(var(--text-rgb) / 0.1);
   --shadow-lg: 0 16px 48px rgb(var(--text-rgb) / 0.16);
   --shadow-text-hairline: 0 1px 0 rgb(var(--text-rgb) / 0.05);
-  /* Rose → iris → foam title fill (detail h1, selected task, brand) */
+  /* Blue → foam title fill (detail h1, selected task, brand) */
   --title-gradient: linear-gradient(
     90deg,
     var(--accent) 0%,
-    var(--title-selected) 50%,
     var(--live) 100%
   );
   /* Specular lift on glass — white on Dawn, Highlight High on Moon. Not a

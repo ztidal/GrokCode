@@ -91,16 +91,27 @@
         border-color: #38383d;
         border-top-color: #ea9a97;
       }
+      /* Warm Gold shares Pure Dark's black ground; only the spinner says so. */
+      :root[data-theme="warmgold"] body {
+        color: #9d9daa;
+      }
+      :root[data-theme="warmgold"] #boot-splash {
+        background: #000000;
+      }
+      :root[data-theme="warmgold"] #boot-splash .mark {
+        border-color: #38383d;
+        border-top-color: #f6c177;
+      }
 
       @media (prefers-color-scheme: dark) {
-        :root:not([data-theme="light"]):not([data-theme="puredark"]) body {
+        :root:not([data-theme="light"]):not([data-theme="puredark"]):not([data-theme="warmgold"]) body {
           color: #908caa;
         }
-        :root:not([data-theme="light"]):not([data-theme="puredark"])
+        :root:not([data-theme="light"]):not([data-theme="puredark"]):not([data-theme="warmgold"])
           #boot-splash {
           background: #232136;
         }
-        :root:not([data-theme="light"]):not([data-theme="puredark"])
+        :root:not([data-theme="light"]):not([data-theme="puredark"]):not([data-theme="warmgold"])
           #boot-splash
           .mark {
           border-color: #56526e;
