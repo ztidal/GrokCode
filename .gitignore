@@ -58,3 +58,4 @@ coverage/
 
 # Generated per release and published to the dist repository, not carried here.
 latest.json
+SHA256SUMS.txt
