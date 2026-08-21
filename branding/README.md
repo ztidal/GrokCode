@@ -75,6 +75,22 @@ Source lives in the private `ztidal/ZtidalCode`. Installers, `latest.json` and i
 `ztidal/ZtidalCode-dist`, because GitHub release assets on a private repository require authentication and
 the updater fetches them anonymously.
 
+Build the feed with `npm run updater:json`; it verifies every signature against the bundle bytes before
+writing, so a feed cannot ship a signature from a different build than the artifact it points at.
+
+### What a release includes besides the bundles
+
+The dist repository is the only thing anyone outside this repo reads, and both halves of it go stale
+silently — nothing fails, the words are just wrong. So a release also means:
+
+- **`README.md` — the usage guide.** Anything the release changed about how the app is used. It had
+  drifted three releases before anyone noticed a pin no longer did what it said.
+- **`docs/index.html` — the landing page.** Only when a *feature* changes. The version, download link and
+  file size come from the releases API at load, so a plain version bump needs nothing here, and the app
+  in the hero is drawn from the same tokens the app uses rather than screenshotted, so a UI change does
+  not leave a stale picture behind. Published from `main` under `/docs`:
+  [ztidal.github.io/ZtidalCode-dist](https://ztidal.github.io/ZtidalCode-dist/).
+
 ## Publishing a release
 
 Build through the overlay, then generate the feed from the bundles that build produced:
