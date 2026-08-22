@@ -6,7 +6,7 @@
 <h1 align="center">ZtidalCode — Grok Desktop GUI</h1>
 
 <p align="center">
-  <strong>Our internal build of PinkCode: same workspace, hardened for team use.</strong>
+  <strong>A public fork of PinkCode: same workspace, hardened for team use.</strong>
 </p>
 
 <p align="center">
@@ -29,8 +29,8 @@ visual desktop workspace while keeping `grok` itself in charge: it connects over
 [ACP](https://spec.acp.dev) (Agent Client Protocol) via stdio and does not run a separate agent loop.
 
 This is a fork of [3xian/PinkCode](https://github.com/3xian/PinkCode), kept deliberately thin. Upstream
-owns the agent-facing core; we own only what makes the app safe and distributable inside the team. See
-[ADR-0001](docs/adr/0001-track-upstream-as-a-thin-hardening-layer.md) for why.
+owns the agent-facing core; we own only what makes the app safe for team use and distributable under its
+own name. See [ADR-0001](docs/adr/0001-track-upstream-as-a-thin-hardening-layer.md) for why.
 
 **Tauri 2 · React 19 · TypeScript · Rust**
 
@@ -56,7 +56,7 @@ Host state lives in `~/.ztidalcode` (`%USERPROFILE%\.ztidalcode` on Windows), se
 ## Screenshot
 
 <p align="center">
-  <img src="docs/product.jpg" alt="Parallel tasks, live Timeline, usage, workspace" width="100%" />
+  <img src="docs/hero.webp" alt="ZtidalCode for Grok Build: several sessions in one window, a timeline that follows the reply, send while the agent is busy, paste files, Git beside the task." width="100%" />
 </p>
 
 <p align="center"><sub>Upstream's screenshot — the interface is unchanged apart from the name and mark.</sub></p>
@@ -107,24 +107,31 @@ location.
 
 ### 2. Install ZtidalCode
 
-Download from **[ZtidalCode-dist releases](https://github.com/ztidal/ZtidalCode-dist/releases)** —
-installers are published there because the in-app updater fetches them anonymously.
+Download from **[ZtidalCode-dist releases](https://github.com/ztidal/ZtidalCode-dist/releases)**.
+Releases live in that repository, not this one: the installers and the update feed are kept apart from
+the source they were built from, and this repository never carries a release of its own.
 
 - **Windows x64 — take `ZtidalCode_<version>_x64-setup.exe`.** It installs per-user, needs no
   administrator, and in-app updates then install silently and relaunch the app.
 - Windows x64, administrator-driven rollout: the MSI. It installs per-machine, so **every in-app update
   prompts for administrator** — see
   [which installer to hand people](branding/README.md#which-installer-to-hand-people).
-- macOS / Linux: build from source
+- **macOS — `ZtidalCode_<version>_universal.dmg`.** One universal build for Apple Silicon and Intel; it
+  updates itself from then on. The macOS half is built on a Mac and uploaded to the same release after
+  the Windows half, so a fresh release may carry only the Windows files for a while.
+- Linux: build from source.
 
-> **Our installers are not Authenticode-signed**, so SmartScreen will warn about an unknown publisher.
-> Check your download against `SHA256SUMS.txt` on the release before installing. In-app updates carry a
-> minisign signature and are verified regardless.
+> **No installer is signed in a way the operating system trusts.** The Windows installers carry
+> no Authenticode signature, so SmartScreen warns about an unknown publisher; the macOS build is ad-hoc
+> signed, not notarized, so Gatekeeper refuses the first open until you allow it once. Check a download
+> against `SHA256SUMS.txt` (Windows) or `SHA256SUMS-mac.txt` (macOS) on the release before installing.
+> In-app updates carry a minisign signature and are verified against a key compiled into the build —
+> see [SECURITY.md](SECURITY.md) for how that works and where to report a vulnerability.
 
 ## Using it
 
 The day-to-day guide — project grouping, pins, the composer, permission modes, slash commands and the
-keyboard table — lives with the downloads, where a teammate lands:
+keyboard table — lives with the downloads, where a new user lands:
 **[ZtidalCode-dist README](https://github.com/ztidal/ZtidalCode-dist#using-it)**.
 
 It is kept there rather than duplicated here so there is one copy to keep true. Two things from it are

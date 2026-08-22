@@ -71,9 +71,16 @@ hand once. That is the trade to weigh when deciding, not a thing to do casually.
 
 ## Where releases go
 
-Source lives in the private `ztidal/ZtidalCode`. Installers, `latest.json` and its `.sig` go to the public
-`ztidal/ZtidalCode-dist`, because GitHub release assets on a private repository require authentication and
-the updater fetches them anonymously.
+Source lives in `ztidal/ZtidalCode`. Installers, their `.sig` files, the feeds (`latest.json`,
+`latest-mac.json`) and the checksum lists go to `ztidal/ZtidalCode-dist`, and the source repository
+carries no releases at all.
+
+The split was forced while the source was still private — the updater fetches anonymously, and an
+anonymous client cannot read release assets there — and it is kept now that the source is public for a
+reason that does not go away: a release is a thing you publish, not a branch you push. `latest.json` and
+`SHA256SUMS.txt` are generated into this tree per release and gitignored, so a feed never travels with the
+source; and the updater endpoint in `ztidalcode.json` is a URL every installed client already carries, so
+where releases live is not free to move (see `.scratch/rename/findings.md`).
 
 Build the feed with `npm run updater:json`; it verifies every signature against the bundle bytes before
 writing, so a feed cannot ship a signature from a different build than the artifact it points at.

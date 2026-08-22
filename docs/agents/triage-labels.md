@@ -16,8 +16,9 @@ Edit the right-hand column to match whatever vocabulary you actually use.
 
 ## How labels are applied in this repo
 
-This repo uses the **local markdown** issue tracker (see `issue-tracker.md`), so a label is a `Status:`
-line near the top of the issue file rather than a tracker-side label:
+Bugs and requests live in GitHub Issues, where these are ordinary labels. Specs and working notes
+under `.scratch/` (see `issue-tracker.md`) carry the same vocabulary as a `Status:` line near the top of
+the file, so an agent reading either place sees one set of roles:
 
 ```markdown
 # 01 — Repoint the updater at our own release feed
@@ -25,6 +26,6 @@ line near the top of the issue file rather than a tracker-side label:
 Status: ready-for-agent
 ```
 
-If this repo later switches to GitHub Issues, note that the fork already inherited a `wontfix` label from
-upstream and it can be reused as-is; the other four (`needs-triage`, `needs-info`, `ready-for-agent`,
-`ready-for-human`) would need creating with `gh label create`.
+On GitHub the fork inherited a `wontfix` label from upstream, reused as-is; the other four
+(`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`) are created with `gh label create`
+the first time they are needed.

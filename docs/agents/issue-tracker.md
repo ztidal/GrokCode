@@ -1,26 +1,59 @@
-# Issue tracker: Local Markdown
+# Issue tracker: GitHub Issues, with `.scratch/` for what is not an issue
 
-Issues and specs (you may know a spec as a PRD) for this repo live as markdown files in `.scratch/`.
+Bug reports and feature requests for this repo are GitHub Issues on
+[`ztidal/ZtidalCode`](https://github.com/ztidal/ZtidalCode/issues). Specs (you may know a spec as a PRD),
+measurements, comparisons and hand-off notes live as markdown under `.scratch/<slug>/` in this repo,
+versioned beside the code they describe. The two are not interchangeable: an issue is something that gets
+closed, a note is something that stays true.
 
-## Conventions
+## Which goes where
 
-- One feature per directory: `.scratch/<feature-slug>/`
-- The spec is `.scratch/<feature-slug>/spec.md`
-- Implementation issues are one file per ticket at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` — never a single combined tickets file
-- Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
-- Comments and conversation history append to the bottom of the file under a `## Comments` heading
+| | Goes to | Because |
+|---|---|---|
+| Something is broken, missing or wrong, and someone should act on it | a GitHub Issue | It has a reporter and an end; labels, cross-references and notifications work; people outside the repo can file it and follow it |
+| A spec for work about to be done | `.scratch/<slug>/spec.md` | It is read during the work and stays as the record of why the code is shaped as it is; the work it implies gets issues of its own |
+| A finding that cost real effort to measure and must not be re-derived | `.scratch/<slug>/findings.md`, or a name that says what it is | There is nothing to close — see `grok-wire-names/spec.md` and `rename/findings.md` |
+| A hand-off in the middle of a release or an effort | `.scratch/<slug>/handoff.md` | It tells the next session where things stand and what is left to do |
+
+An issue may point at a `.scratch/` file and a `.scratch/` file may point at an issue, but a `.scratch/`
+file is never the only record of a bug.
+
+## `.scratch/` conventions
+
+- One effort per directory: `.scratch/<slug>/`.
+- The spec is `spec.md`; other files are named for what they are (`findings.md`, `handoff.md`, `map.md`).
+- A `Status:` line near the top says where the effort stands, in words — `Parked — the name is
+  undecided`, `held, awaiting the user's own check`. The triage roles in `triage-labels.md` are labels
+  for issues, not values for this line.
+- Everything under `.scratch/` is committed, and the repository is public. Working files that should not
+  be published — logs, builds, a clone of the dist repo — belong in the session scratchpad outside the
+  repository, and a `.scratch/` file may refer to them by location but never carry them.
 
 ## When a skill says "publish to the issue tracker"
 
-Create a new file under `.scratch/<feature-slug>/` (creating the directory if needed).
+Create a GitHub Issue and apply the triage label from `triage-labels.md`:
+
+```bash
+gh issue create --repo ztidal/ZtidalCode --title "<title>" --body-file <file> --label <triage label>
+```
+
+If what the skill produced is a spec rather than a ticket, write it to `.scratch/<slug>/spec.md` and open
+one issue per piece of work it implies — never a single combined issue.
 
 ## When a skill says "fetch the relevant ticket"
 
-Read the file at the referenced path. The user will normally pass the path or the issue number directly.
+```bash
+gh issue view <number> --repo ztidal/ZtidalCode --comments
+```
+
+The user will normally pass the number or the URL. A path under `.scratch/` is a note, not a ticket: read
+the file.
 
 ## Wayfinding operations
 
-Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
+Used by `/wayfinder`. These tickets are questions one session claims and answers inside one effort. They
+stay as files because they are working notes, not reports: nobody outside the effort needs to follow
+them, and they are finished when the map is.
 
 - **Map**: `.scratch/<effort>/map.md` — the Notes / Decisions-so-far / Fog body.
 - **Child ticket**: `.scratch/<effort>/issues/NN-<slug>.md`, numbered from `01`, with the question in the body. A `Type:` line records the ticket type (`research`/`prototype`/`grilling`/`task`); a `Status:` line records `claimed`/`resolved`.
@@ -29,21 +62,12 @@ Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
 - **Claim**: set `Status: claimed` and save before any work.
 - **Resolve**: append the answer under an `## Answer` heading, set `Status: resolved`, then append a context pointer (gist + link) to the map's Decisions-so-far in `map.md`.
 
-## Why local markdown for this repo
+## What moved, and what did not
 
-This repo is a fork of [`3xian/PinkCode`](https://github.com/3xian/PinkCode) maintained for internal hardening
-and packaging. Local markdown was chosen over GitHub Issues for two reasons:
-
-1. GitHub disables Issues on forks by default (`has_issues: false` on `ztidal/PinkCode`), so the GitHub
-   route needs a repository settings change before it works at all.
-2. The fork is public — GitHub's forks of public repositories cannot be made private — so issues filed
-   there would be publicly visible, which is a poor fit for internal security-hardening work.
-
-### Switching to GitHub later
-
-If the fork is replaced by a private mirror, or you decide public issues are acceptable:
-
-1. Enable Issues on the repo: `gh api -X PATCH repos/ztidal/PinkCode -f has_issues=true`
-2. Replace this file with the GitHub template from the `setup-matt-pocock-skills` skill folder
-   (`issue-tracker-github.md`).
-3. Create the four missing triage labels (`wontfix` already exists on this fork — see `triage-labels.md`).
+Until the repository went public, this file said that every ticket was a markdown file —
+`.scratch/<slug>/issues/NN-<slug>.md`, with the triage role on its `Status:` line — because GitHub Issues
+was disabled on the repository at the time and the hardening work was not yet public. Issues is enabled
+now. Implementation tickets, bug reports and requests are GitHub Issues, and the triage role is a label on
+the issue rather than a line in a file. Specs, findings, hand-offs, the `Status:` line on a note and the
+wayfinding files are where they were. No ticket file was ever committed under the old path, so there is
+nothing to migrate.
