@@ -86,9 +86,9 @@ silently — nothing fails, the words are just wrong. So a release also means:
 - **`README.md` — the usage guide.** Anything the release changed about how the app is used. It had
   drifted three releases before anyone noticed a pin no longer did what it said.
 - **`docs/index.html` — the landing page.** Only when a *feature* changes. The version, download link and
-  file size come from the releases API at load, so a plain version bump needs nothing here, and the app
-  in the hero is drawn from the same tokens the app uses rather than screenshotted, so a UI change does
-  not leave a stale picture behind. Published from `main` under `/docs`:
+  file size come from the releases API at load, so a plain version bump needs nothing here. The hero
+  is a picture (`docs/hero.webp`) and can go stale: replace it when the look changes noticeably, or
+  when a claim printed on it stops being true. Published from `main` under `/docs`:
   [ztidal.github.io/ZtidalCode-dist](https://ztidal.github.io/ZtidalCode-dist/).
 
 ## Publishing a release
