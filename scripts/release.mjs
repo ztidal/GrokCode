@@ -87,7 +87,7 @@ options
   --install            after verifying: run the NSIS setup with /P /R and confirm the
                        installed exe reports the new version
   --draft              after verifying: create/update draft v<X.Y.Z> on ${distRepo}
-                       with the Windows feed, checksums, installers and signatures; never publish
+                       with only the two Windows installers and signatures; never publish
   --dry-run            preflight and plan only — writes nothing, commits nothing
   --help               this text
 
@@ -375,9 +375,7 @@ function builtBundle(sub, ext) {
 
 const nsis = builtBundle("nsis", "-setup.exe");
 const msi = builtBundle("msi", ".msi");
-const assets = [
-  join(repoRoot, "latest.json"),
-  join(repoRoot, "SHA256SUMS.txt"),
+const windowsAssets = [
   nsis,
   `${nsis}.sig`,
   msi,
@@ -396,7 +394,7 @@ const draftArgs = [
   `${productName} ${version}`,
   "--draft",
   ...(notesFile ? ["--notes-file", notesFile] : ["--notes", notesText]),
-  ...assets,
+  ...windowsAssets,
 ];
 
 if (doInstall) {
@@ -430,7 +428,15 @@ if (doDraft) {
       die(`v${version} is already published on ${distRepo}`);
     }
     console.log(`v${version} already exists as a draft; updating only the Windows-owned assets`);
-    run("gh", ["release", "upload", `v${version}`, "--repo", distRepo, "--clobber", ...assets]);
+    run("gh", [
+      "release",
+      "upload",
+      `v${version}`,
+      "--repo",
+      distRepo,
+      "--clobber",
+      ...windowsAssets,
+    ]);
     run("gh", [
       "release",
       "edit",

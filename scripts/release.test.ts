@@ -12,6 +12,7 @@ describe("cross-platform release handoff", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("--draft");
     expect(result.stdout).not.toContain("--publish");
+    expect(result.stdout).toContain("only the two Windows installers and signatures");
     expect(result.stdout).toContain("Mac-side release owner");
   });
 });
