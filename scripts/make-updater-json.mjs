@@ -36,7 +36,6 @@ import { createHash, createPublicKey, verify as verifyEd25519 } from "node:crypt
 import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { gunzipSync } from "node:zlib";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -126,54 +125,6 @@ function verifyBundle(bytes, signatureB64, expectedName) {
   return trustedComment;
 }
 
-function tarString(header, offset, length) {
-  const field = header.subarray(offset, offset + length);
-  const nul = field.indexOf(0);
-  return field.subarray(0, nul === -1 ? field.length : nul).toString("utf8");
-}
-
-/** Read exact, short ustar paths without extracting anything to disk. */
-function readTarFiles(gzipBytes, expectedNames) {
-  let tar;
-  try {
-    tar = gunzipSync(gzipBytes);
-  } catch (error) {
-    throw new Error(`cannot decompress gzip archive: ${error.message}`);
-  }
-
-  const expected = new Set(expectedNames);
-  const found = new Map();
-  let offset = 0;
-  while (offset + 512 <= tar.length) {
-    const header = tar.subarray(offset, offset + 512);
-    if (header.every((byte) => byte === 0)) break;
-
-    const name = tarString(header, 0, 100);
-    const prefix = tarString(header, 345, 155);
-    const path = prefix ? `${prefix}/${name}` : name;
-    const sizeField = tarString(header, 124, 12).trim();
-    const size = sizeField === "" ? 0 : Number.parseInt(sizeField, 8);
-    if (!Number.isSafeInteger(size) || size < 0) {
-      throw new Error(`invalid tar size for ${path || "unnamed entry"}`);
-    }
-
-    const dataStart = offset + 512;
-    const dataEnd = dataStart + size;
-    if (dataEnd > tar.length) {
-      throw new Error(`truncated tar entry ${path || "unnamed entry"}`);
-    }
-    if (expected.has(path)) {
-      found.set(path, Buffer.from(tar.subarray(dataStart, dataEnd)));
-    }
-    offset = dataStart + Math.ceil(size / 512) * 512;
-  }
-
-  for (const name of expected) {
-    if (!found.has(name)) throw new Error(`archive is missing ${name}`);
-  }
-  return found;
-}
-
 // --- provenance: the bundles must wrap a binary built through the overlay ---------------------
 
 const bundleDir = arg("bundle-dir", join(repoRoot, "src-tauri", "target", "release", "bundle"));
@@ -188,30 +139,28 @@ if (!binaryName) die("neither branding/ztidalcode.json nor src-tauri/tauri.conf.
 // Both installers wrap this one file, and both compress it, so the binary itself is the only
 // place the pubkey string is findable. It sits beside the bundle directory the build produced.
 const binary = arg("exe", join(bundleDir, "..", `${binaryName}.exe`));
+if (!existsSync(binary)) {
+  die(`${binary} is missing — build it: npm run tauri -- build --config branding/ztidalcode.json`);
+}
+const binaryBytes = readFileSync(binary);
+const carries = (key) => binaryBytes.includes(Buffer.from(key, "utf8"));
+
+if (!carries(pubkeyB64)) {
+  die(
+    `${basename(binary)} does not carry our updater key — it was built without ` +
+      "--config branding/ztidalcode.json; rebuild and re-bundle before publishing",
+  );
+}
 // Read out of the base config rather than pinned here, so this still names the right key after an
 // upstream sync rotates it.
 const upstreamPubkey = baseConf.plugins?.updater?.pubkey;
-
-function verifyBrandedBytes(bytes, name) {
-  const carries = (key) => bytes.includes(Buffer.from(key, "utf8"));
-  if (!carries(pubkeyB64)) {
-    die(
-      `${name} does not carry our updater key — it was built without ` +
-        "--config branding/ztidalcode.json; rebuild and re-bundle before publishing",
-    );
-  }
-  if (upstreamPubkey && upstreamPubkey !== pubkeyB64 && carries(upstreamPubkey)) {
-    die(
-      `${name} also carries the updater key from src-tauri/tauri.conf.json — the overlay ` +
-        "did not replace the trust anchor; do not publish this build",
-    );
-  }
-  console.log(`${name}  ${bytes.length} bytes  built through the branding overlay`);
+if (upstreamPubkey && upstreamPubkey !== pubkeyB64 && carries(upstreamPubkey)) {
+  die(
+    `${basename(binary)} also carries the updater key from src-tauri/tauri.conf.json — the overlay ` +
+      "did not replace the trust anchor; do not publish this build",
+  );
 }
-
-function verifyBrandedBinary(path) {
-  verifyBrandedBytes(readFileSync(path), basename(path));
-}
+console.log(`${basename(binary)}  ${binaryBytes.length} bytes  built through the branding overlay`);
 
 // --- collect the bundles ----------------------------------------------------------------------
 
@@ -236,26 +185,9 @@ const installers = [
 
 const platforms = {};
 const checksums = [];
-const windowsBundles = installers.map((installer) => ({
-  ...installer,
-  path: findBundle(installer.subdir, installer.ext),
-}));
-const hasAnyWindowsArtifact =
-  existsSync(binary) || windowsBundles.some(({ path }) => path !== null);
-
-if (hasAnyWindowsArtifact) {
-  if (!existsSync(binary)) {
-    die(`${binary} is missing — build it: npm run tauri -- build --config branding/ztidalcode.json`);
-  }
-  verifyBrandedBinary(binary);
-}
-
-for (const { keys, subdir, ext, path } of hasAnyWindowsArtifact ? windowsBundles : []) {
-  if (!path) {
-    die(
-      `no ${ext} bundle under ${join(bundleDir, subdir)} — build with the branding overlay first`,
-    );
-  }
+for (const { keys, subdir, ext } of installers) {
+  const path = findBundle(subdir, ext);
+  if (!path) die(`no ${ext} bundle under ${join(bundleDir, subdir)} — build with the branding overlay first`);
 
   const sigPath = `${path}.sig`;
   if (!existsSync(sigPath)) {
@@ -282,90 +214,6 @@ for (const { keys, subdir, ext, path } of hasAnyWindowsArtifact ? windowsBundles
   for (const key of keys) {
     platforms[key] = { signature, url: `${downloadBase}/${basename(path)}` };
   }
-}
-
-// Tauri's macOS updater installs the signed `.app.tar.gz`; the DMG is the human-facing installer
-// and therefore belongs in SHA256SUMS, but never in a platform entry. The archive name itself does
-// not carry an architecture, so the companion DMG is deliberately exact and arm64-specific rather
-// than accepting any `.dmg` left behind by another target or version.
-const productName = branding.productName;
-const macArchiveName = `${productName}.app.tar.gz`;
-const macArchive = join(bundleDir, "macos", macArchiveName);
-const macSignaturePath = `${macArchive}.sig`;
-const macDmgName = `${productName}_${version}_aarch64.dmg`;
-const macDmg = join(bundleDir, "dmg", macDmgName);
-const hasAnyMacArtifact =
-  existsSync(macArchive) ||
-  existsSync(macSignaturePath) ||
-  existsSync(macDmg);
-
-if (hasAnyMacArtifact) {
-  if (!existsSync(macArchive)) {
-    die(`${macArchive} is missing — build the arm64 macOS bundle with the branding overlay first`);
-  }
-  if (!existsSync(macSignaturePath)) {
-    die(`${macArchiveName} has no .sig — the build ran without TAURI_SIGNING_PRIVATE_KEY`);
-  }
-  if (!existsSync(macDmg)) {
-    die(`${macDmg} is missing — expected the arm64 DMG for version ${version}`);
-  }
-
-  const archiveBytes = readFileSync(macArchive);
-  const signatureFileBytes = readFileSync(macSignaturePath);
-  const signature = signatureFileBytes.toString("utf8").trim();
-  let trustedComment;
-  try {
-    trustedComment = verifyBundle(archiveBytes, signature, macArchiveName);
-  } catch (error) {
-    die(`${macArchiveName}: ${error.message}`);
-  }
-
-  const archivedInfoPath = `${productName}.app/Contents/Info.plist`;
-  const archivedBinaryPath = `${productName}.app/Contents/MacOS/${binaryName}`;
-  let archivedFiles;
-  try {
-    archivedFiles = readTarFiles(archiveBytes, [archivedInfoPath, archivedBinaryPath]);
-  } catch (error) {
-    die(`${macArchiveName}: ${error.message}`);
-  }
-  const archivedInfo = archivedFiles.get(archivedInfoPath).toString("utf8");
-  const appVersion = archivedInfo.match(
-    /<key>\s*CFBundleShortVersionString\s*<\/key>\s*<string>\s*([^<]+?)\s*<\/string>/,
-  )?.[1];
-  if (!appVersion) {
-    die(`${macArchiveName}: ${archivedInfoPath} has no CFBundleShortVersionString`);
-  }
-  if (appVersion !== version) {
-    die(`Mac app version is ${appVersion}, but branding version is ${version}`);
-  }
-  const archivedBinary = archivedFiles.get(archivedBinaryPath);
-  const isThinArm64MachO =
-    archivedBinary.length >= 8 &&
-    archivedBinary.readUInt32LE(0) === 0xfeedfacf &&
-    archivedBinary.readUInt32LE(4) === 0x0100000c;
-  if (!isThinArm64MachO) {
-    die(`${binaryName} is not a thin arm64 Mach-O executable`);
-  }
-  verifyBrandedBytes(archivedBinary, binaryName);
-
-  console.log(
-    `${macArchiveName}  ${archiveBytes.length} bytes  verified  (${trustedComment})`,
-  );
-  for (const key of ["darwin-aarch64-app", "darwin-aarch64"]) {
-    platforms[key] = { signature, url: `${downloadBase}/${macArchiveName}` };
-  }
-
-  for (const [name, bytes] of [
-    [macDmgName, readFileSync(macDmg)],
-    [macArchiveName, archiveBytes],
-    [`${macArchiveName}.sig`, signatureFileBytes],
-  ]) {
-    checksums.push(`${createHash("sha256").update(bytes).digest("hex")} *${name}`);
-  }
-}
-
-if (Object.keys(platforms).length === 0) {
-  die(`no Windows or arm64 macOS updater bundles found under ${bundleDir}`);
 }
 
 // --- emit -------------------------------------------------------------------------------------
