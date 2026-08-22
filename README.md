@@ -6,7 +6,7 @@
 <h1 align="center">ZtidalCode — Grok Desktop GUI</h1>
 
 <p align="center">
-  <strong>Our internal build of PinkCode: same workspace, hardened for team use.</strong>
+  <strong>Our macOS and Windows build of PinkCode: same workspace, hardened for team use.</strong>
 </p>
 
 <p align="center">
@@ -59,7 +59,7 @@ Host state lives in `~/.ztidalcode` (`%USERPROFILE%\.ztidalcode` on Windows), se
   <img src="docs/product.jpg" alt="Parallel tasks, live Timeline, usage, workspace" width="100%" />
 </p>
 
-<p align="center"><sub>Upstream's screenshot — the interface is unchanged apart from the name and mark.</sub></p>
+<p align="center"><sub>Upstream's screenshot — ZtidalCode keeps the same workspace and adds its own title-bar identity and Settings entry point.</sub></p>
 
 ## Features
 
@@ -81,7 +81,7 @@ The rest of the interface keeps those parallel workflows practical:
 | **Modes & plans** | Shift+Tab-style cycle aligned with Grok Build: **Normal → Plan → Auto → Always-approve**. Plan is orthogonal to permission mode; free-text send becomes `/plan …`. When the agent exits plan mode, review and choose Approve, Request changes, or Quit. |
 | **Model** | Switch the session model mid-task over ACP `session/set_model`. |
 | **Permissions** | Default (ask), Accept edits, Auto (classified by Grok), Always approve, Don't ask. Per-task prefs in `~/.ztidalcode/task_prefs.json`. Handles tool permission, file writes, plan approval, and ask-user questions; the task list surfaces **Needs input** when a reverse-request is open. |
-| **Updates** | Checks our own release feed once at startup — click the title-bar mark to check again — and installs an update in one click. Updates are minisign-verified against a key compiled into the build. |
+| **Updates** | Checks our own release feed once at startup. On macOS and Windows, open the same title-bar gear and choose **Check for Updates**; the macOS title-bar mark remains a shortcut. Updates are minisign-verified against a key compiled into the build. |
 
 ## Installation
 
@@ -115,11 +115,16 @@ installers are published there because the in-app updater fetches them anonymous
 - Windows x64, administrator-driven rollout: the MSI. It installs per-machine, so **every in-app update
   prompts for administrator** — see
   [which installer to hand people](branding/README.md#which-installer-to-hand-people).
-- macOS / Linux: build from source
+- **macOS Apple Silicon — take `ZtidalCode_<version>_aarch64.dmg`.** Open the DMG and drag ZtidalCode to
+  Applications. The release currently promises an Apple Silicon package only; it does not claim an Intel
+  Mac build.
+- Linux: build from source.
 
-> **Our installers are not Authenticode-signed**, so SmartScreen will warn about an unknown publisher.
-> Check your download against `SHA256SUMS.txt` on the release before installing. In-app updates carry a
-> minisign signature and are verified regardless.
+> **Windows:** our installers are not Authenticode-signed, so SmartScreen will warn about an unknown
+> publisher. **macOS:** the app has no Apple Developer ID signature or notarization, so Gatekeeper may
+> block the first normal double-click; Control-click (or right-click) ZtidalCode, choose **Open**, then
+> confirm once. Check either download against `SHA256SUMS.txt` on the release. In-app updates on both
+> platforms carry a minisign signature and are verified independently of those OS warnings.
 
 ## Using it
 
@@ -134,6 +139,9 @@ worth repeating for anyone changing this code:
   `{"defaultPermissionMode":"default"}` in `~/.ztidalcode/config.json`, restores the prompt without a
   rebuild. See [ADR-0002](docs/adr/0002-no-permission-policy-layer.md).
 - **`Enter` sends and `Ctrl+Enter` inserts a newline**, which is the reverse of most chat apps.
+- **Settings is the small gear in the title bar on macOS and Windows.** Both open the same menu, in the
+  same order: New Window, Check for Updates, the five themes, and the current version. The title-bar identity reads
+  **ZtidalCode for Grok Build**; macOS also opens Settings with `Command+,`.
 
 ### Logs
 
@@ -182,7 +190,9 @@ npm run tauri -- build --config branding/ztidalcode.json
 ```
 
 See [`branding/README.md`](branding/README.md) for the signing key, the version scheme, and the Windows
-Installer limits that constrain it.
+Installer limits that constrain it. Releases are assembled from one source commit: the Windows PC builds
+the Windows artifacts, while the Mac release owner builds Apple Silicon, combines both platforms into one
+update manifest, and publishes the complete draft.
 
 ### Keeping up with upstream
 
