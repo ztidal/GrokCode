@@ -19,6 +19,7 @@ mod project_fs;
 mod project_groups;
 mod proxy;
 mod rpc_handler;
+mod session_flags;
 mod session_noise;
 mod session_titles;
 mod session_trash;
@@ -699,6 +700,48 @@ async fn set_session_title(
         .map_err(|e| format!("rename task failed: {e}"))?
 }
 
+/// Which sessions are pinned and which archived — both sets, one document.
+///
+/// Read once when a window starts. Absent or unreadable answers empty sets: a
+/// preference file is not worth failing a window over.
+#[tauri::command]
+async fn list_session_flags() -> session_flags::SessionFlags {
+    tauri::async_runtime::spawn_blocking(session_flags::load)
+        .await
+        .unwrap_or_default()
+}
+
+/// Pin, unpin, archive or un-archive one session.
+///
+/// Answers the whole document rather than an acknowledgement: the write
+/// re-reads under a lock, so what comes back includes anything another window
+/// flagged while this one was not looking.
+#[tauri::command]
+async fn set_session_flag(
+    session_id: String,
+    flag: session_flags::Flag,
+    value: bool,
+) -> Result<session_flags::SessionFlags, String> {
+    tauri::async_runtime::spawn_blocking(move || session_flags::set(&session_id, flag, value))
+        .await
+        .map_err(|e| format!("flag task failed: {e}"))?
+}
+
+/// Fold a window's pre-upgrade localStorage pins and archives in, as a union.
+///
+/// The union is what lets two windows migrate the same profile at once: each
+/// adds what it holds, neither can erase the other's, and a second run of the
+/// same merge changes nothing.
+#[tauri::command]
+async fn merge_session_flags(
+    pinned: Vec<String>,
+    archived: Vec<String>,
+) -> Result<session_flags::SessionFlags, String> {
+    tauri::async_runtime::spawn_blocking(move || session_flags::merge(pinned, archived))
+        .await
+        .map_err(|e| format!("flag merge task failed: {e}"))?
+}
+
 /// Move a session out of the sidebar and out of `grok`'s reach, reversibly.
 ///
 /// Named for what it does rather than for the menu item that calls it: nothing
@@ -834,6 +877,9 @@ pub fn run() {
             read_image_preview,
             list_session_titles,
             set_session_title,
+            list_session_flags,
+            set_session_flag,
+            merge_session_flags,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -102,7 +102,8 @@ export function SessionList({
   onDeleted,
 }: Props) {
   const { pinnedIds, isPinned, togglePinned, unpin } = useSessionPins();
-  const { archivedIds, isArchived, toggleArchived } = useSessionArchive();
+  const { archivedIds, isArchived, toggleArchived, unarchive } =
+    useSessionArchive();
   const { displayTitle, originalTitle, rename } = useSessionTitles();
 
   /** The card whose menu is open, and where it was opened. */
@@ -511,6 +512,7 @@ export function SessionList({
                       // them by id reuse, then tell the list: nothing else
                       // will, the watcher included.
                       unpin(card.id);
+                      unarchive(card.id);
                       setPendingDelete(null);
                       onDeleted?.(card.id);
                     })

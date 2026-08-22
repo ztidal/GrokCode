@@ -6,9 +6,6 @@ import {
   useStoredIdSet,
 } from "./useIdSet";
 
-/** Fork-owned key — upstream stores nothing under this prefix (ADR-0003). */
-const PINNED_KEY = "ztidalcode.sessions.pinned";
-
 /**
  * The stored-set primitives, re-exported under the names this module has always
  * used. Pins and the archive keep one implementation between them; only what
@@ -55,12 +52,16 @@ export interface SessionPinsApi {
  * list and the project groups, and a card cannot be pinned in one view while
  * looking unpinned in another.
  *
- * Per-machine UI preference, so localStorage rather than a Rust command —
- * nothing about a pin belongs in agent state (ADR-0001: no new subsystem for
- * something a key/value entry already holds).
+ * The set lives host-side (`~/.ztidalcode/session_flags.json`), in the
+ * document it shares with the archive. It started in localStorage as a
+ * "per-machine preference", but that argument answered cross-machine sync,
+ * not same-machine durability: localStorage batches its writes, so a killed
+ * window lost its last few pins, and two windows — first-class here — each
+ * held the whole set and overwrote each other. Still nothing of the agent's
+ * (ADR-0001): a pin is our note about `grok`'s session, never a write to it.
  */
 export function useSessionPins(): SessionPinsApi {
-  const { ids, has, toggle, remove } = useStoredIdSet(PINNED_KEY);
+  const { ids, has, toggle, remove } = useStoredIdSet("pinned");
   return useMemo(
     () => ({
       pinnedIds: ids,

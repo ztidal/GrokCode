@@ -596,6 +596,60 @@ export async function setSessionTitle(
   });
 }
 
+/** Which of the sidebar's two session-id sets a flag command addresses. */
+export type SessionFlag = "pinned" | "archived";
+
+/** Both sets, whole — the answer every flag command gives. */
+export interface SessionFlagsState {
+  pinned: string[];
+  archived: string[];
+}
+
+/**
+ * The pinned and archived session ids, one document for both.
+ *
+ * Read once when a window starts. These moved out of localStorage the way the
+ * titles did, and for the same reason: the browser store batches to disk and
+ * each window holds its own whole copy, so a killed window lost its last flags
+ * and two windows overwrote each other wholesale.
+ */
+export async function listSessionFlags(): Promise<SessionFlagsState> {
+  return invoke<SessionFlagsState>("list_session_flags");
+}
+
+/**
+ * Pin, unpin, archive or un-archive one session.
+ *
+ * Resolves with the whole store, not an acknowledgement: the host re-reads
+ * under a lock before writing, so the answer carries anything another window
+ * flagged meanwhile.
+ */
+export async function setSessionFlag(
+  sessionId: string,
+  flag: SessionFlag,
+  value: boolean,
+): Promise<SessionFlagsState> {
+  return invoke<SessionFlagsState>("set_session_flag", {
+    sessionId,
+    flag,
+    value,
+  });
+}
+
+/**
+ * Fold a window's pre-upgrade localStorage sets into the host's store.
+ *
+ * Applied as a union under the host's lock, which is what makes two windows
+ * migrating the same profile at once harmless: each adds what it holds, and
+ * neither can erase the other's.
+ */
+export async function mergeSessionFlags(
+  pinned: string[],
+  archived: string[],
+): Promise<SessionFlagsState> {
+  return invoke<SessionFlagsState>("merge_session_flags", { pinned, archived });
+}
+
 /**
  * Move a session out of the sidebar and out of `grok`'s reach.
  *
