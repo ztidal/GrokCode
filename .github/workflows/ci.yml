@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, hardening]
+    branches: [main]
   pull_request:
 
 concurrency:
@@ -33,9 +33,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          # PR caches are scoped to that PR and cannot help a primary branch or another PR.
-          # Pay the upload cost only on the upstream-sync and release branches.
-          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/hardening' }}
+          # PR caches are scoped to that PR and cannot help main or another PR.
+          # Restore main's cache everywhere, but only pay the upload cost on main.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # Keep the same commands as scripts/check-rust.mjs without installing the
       # unrelated frontend dependency tree in this job.
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
