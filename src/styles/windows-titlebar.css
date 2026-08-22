@@ -72,9 +72,7 @@
   align-items: stretch;
 }
 
-.windows-settings-trigger,
-.windows-window-control,
-.windows-settings-item {
+.windows-window-control {
   appearance: none;
   -webkit-appearance: none;
   border: none;
@@ -86,15 +84,8 @@
 }
 
 .windows-settings-trigger {
-  min-width: 84px;
-  padding: 0 10px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
+  width: 34px;
+  height: 32px;
 }
 
 .windows-settings-trigger:hover,
@@ -103,24 +94,8 @@
   color: var(--text);
 }
 
-.windows-settings-chevron {
-  display: block;
-  flex-shrink: 0;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  transition: transform 120ms ease;
-}
-
-.windows-settings-trigger[aria-expanded="true"] .windows-settings-chevron {
-  transform: rotate(180deg);
-}
-
 .windows-settings-trigger:focus-visible,
-.windows-window-control:focus-visible,
-.windows-settings-item:focus-visible {
+.windows-window-control:focus-visible {
   outline: 2px solid var(--live);
   outline-offset: -2px;
 }
@@ -130,40 +105,6 @@
   z-index: 30;
   top: calc(100% + 1px);
   left: 0;
-  width: 208px;
-  padding: 4px;
-  border: 1px solid var(--border-strong);
-  background: var(--bg-menu);
-  box-shadow: var(--shadow-md);
-}
-
-.windows-settings-item {
-  width: 100%;
-  min-height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 9px;
-  color: var(--text);
-  font-size: 12px;
-  text-align: left;
-}
-
-.windows-settings-item:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-
-.windows-settings-item:disabled {
-  cursor: default;
-  opacity: 0.68;
-}
-
-/* Trailing note on a Settings item, e.g. New Window while its process starts. */
-.windows-settings-item-status {
-  color: var(--text-muted);
-  font-size: 10px;
-  white-space: nowrap;
 }
 
 .windows-update-status {
@@ -181,24 +122,6 @@
 
 .windows-update-status.is-error {
   color: var(--danger);
-}
-
-.windows-settings-separator {
-  height: 1px;
-  margin: 4px 6px;
-  background: var(--border);
-}
-
-.windows-settings-version {
-  min-height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 9px;
-  color: var(--text-muted);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
 }
 
 .windows-window-control {
@@ -253,61 +176,4 @@
 
 .windows-control-close::after {
   transform: rotate(-45deg);
-}
-
-/* ── Theme toggle (Settings menu) ── */
-.theme-toggle-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 7px 9px 9px;
-}
-
-.theme-toggle-label {
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.theme-toggle-hint {
-  color: var(--text-muted);
-}
-
-/* Two per row, not one row of four. The Settings menu is 208px wide, which
-   leaves ~43px per option across four — narrower than the word "Pure Dark". */
-.theme-toggle {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-hover);
-}
-
-.theme-toggle-option {
-  appearance: none;
-  -webkit-appearance: none;
-  border: none;
-  border-radius: 4px;
-  padding: 4px 0;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.theme-toggle-option:hover {
-  color: var(--text);
-}
-
-.theme-toggle-option[aria-checked="true"] {
-  background: var(--bg-menu);
-  color: var(--text);
-  box-shadow: var(--shadow-sm);
-}
-
-.theme-toggle-option:focus-visible {
-  outline: 2px solid var(--live);
-  outline-offset: -2px;
 }

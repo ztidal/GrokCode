@@ -40,14 +40,24 @@ html.platform-macos-desktop .side-panel.workspace-panel {
   flex-shrink: 0;
 }
 
-/* Brand mark sits under the lights — not beside them. Click → update check. */
+/* Brand and Settings sit under the lights — not beside them. */
+.macos-titlebar-controls {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+  width: calc(100% - 20px);
+  margin: 0 10px 2px;
+}
+
+/* Click the brand to check for updates; Settings remains a separate target. */
 .macos-titlebar-brand {
   display: flex;
   align-items: center;
   gap: 9px;
+  flex: 1;
   min-width: 0;
-  width: calc(100% - 20px);
-  margin: 0 10px 2px;
+  margin: 0;
   padding: 8px 4px;
   border: none;
   border-radius: 8px;
@@ -104,6 +114,17 @@ html.platform-macos-desktop .side-panel.workspace-panel {
   white-space: nowrap;
 }
 
+.macos-titlebar-subtitle {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .macos-titlebar-version {
   font-size: 10px;
   font-weight: 600;
@@ -123,6 +144,47 @@ html.platform-macos-desktop .side-panel.workspace-panel {
 
 .macos-titlebar-brand.is-checking .macos-titlebar-version {
   color: var(--text-muted);
+}
+
+.macos-settings {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.macos-settings-trigger {
+  width: 34px;
+  height: 100%;
+  min-height: 38px;
+  border-radius: 8px;
+}
+
+.macos-settings-trigger:hover,
+.macos-settings-trigger[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--bg-hover) 76%, transparent);
+  color: var(--text);
+}
+
+.macos-settings-trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--title-selected) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.macos-settings-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  right: 0;
+}
+
+/* overlays.css narrows the left rail to 168px at the app's 1100px minimum
+ * width. Open the 208px panel into the workspace instead of off-screen. */
+@media (max-width: 1200px) {
+  .macos-settings-panel {
+    right: auto;
+    left: 0;
+  }
 }
 
 /* Status card sits under the brand block on macOS */

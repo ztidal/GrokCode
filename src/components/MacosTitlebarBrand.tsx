@@ -1,13 +1,65 @@
 import logoMark from "../assets/logo.png";
+import { useEffect, useId, useRef, useState } from "react";
 import type { UpdateCheckStatus } from "../hooks/useAppUpdate";
 import { useAppVersion } from "../hooks/useAppVersion";
 import { isMacosDesktop } from "../utils/platform";
+import {
+  DesktopSettingsPanel,
+  SettingsGearIcon,
+} from "./DesktopSettings";
 
 const STATUS_LINE: Partial<Record<UpdateCheckStatus, string>> = {
   checking: "Checking for updates…",
   "up-to-date": "You're up to date",
   error: "Update check failed",
 };
+
+type SettingsShortcutEvent = Pick<
+  KeyboardEvent,
+  "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey"
+>;
+
+/** macOS' conventional application-settings shortcut, with no modifier aliases. */
+export function isMacosSettingsShortcut(
+  event: SettingsShortcutEvent,
+): boolean {
+  return (
+    event.key === "," &&
+    event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey &&
+    !event.shiftKey
+  );
+}
+
+/** Independently renderable macOS wrapper around the shared Settings body. */
+export function MacosSettingsPanel({
+  version,
+  updateBusy = false,
+  onCheckUpdate = () => {},
+  onClose = () => {},
+  onWindowError = () => {},
+  id,
+}: {
+  version: string | null;
+  updateBusy?: boolean;
+  onCheckUpdate?: () => void;
+  onClose?: () => void;
+  onWindowError?: (message: string) => void;
+  id?: string;
+}) {
+  return (
+    <DesktopSettingsPanel
+      className="macos-settings-panel"
+      version={version}
+      updateBusy={updateBusy}
+      onCheckUpdate={onCheckUpdate}
+      onClose={onClose}
+      onWindowError={onWindowError}
+      id={id}
+    />
+  );
+}
 
 /**
  * macOS-only Overlay chrome: empty traffic-light strip, brand mark below.
@@ -16,18 +68,57 @@ const STATUS_LINE: Partial<Record<UpdateCheckStatus, string>> = {
 export function MacosTitlebarBrand({
   onCheckUpdate,
   checkStatus,
+  onWindowError,
 }: {
   onCheckUpdate: () => void;
   checkStatus: UpdateCheckStatus;
+  onWindowError: (message: string) => void;
 }) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
+  const settingsTriggerRef = useRef<HTMLButtonElement>(null);
+  const settingsPanelId = useId();
   const macDesktop = isMacosDesktop();
   const version = useAppVersion(macDesktop);
+
+  useEffect(() => {
+    if (!macDesktop) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isMacosSettingsShortcut(event)) {
+        event.preventDefault();
+        setSettingsOpen(true);
+        return;
+      }
+      if (event.key === "Escape" && settingsOpen) {
+        event.preventDefault();
+        setSettingsOpen(false);
+        settingsTriggerRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [macDesktop, settingsOpen]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!settingsRef.current?.contains(event.target as Node)) {
+        setSettingsOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [settingsOpen]);
 
   if (!macDesktop) return null;
 
   const statusLine =
     STATUS_LINE[checkStatus] ?? (version ? `v${version}` : null);
   const busy = checkStatus === "checking";
+  const closeSettingsAndRestoreFocus = () => {
+    setSettingsOpen(false);
+    settingsTriggerRef.current?.focus();
+  };
 
   return (
     <div
@@ -37,33 +128,66 @@ export function MacosTitlebarBrand({
     >
       {/* Native traffic lights sit here; keep clear + draggable */}
       <div className="macos-titlebar-traffic" data-tauri-drag-region />
-      <button
-        type="button"
-        className={`macos-titlebar-brand${
-          checkStatus !== "idle" ? ` is-${checkStatus}` : ""
-        }`}
-        onClick={() => {
-          if (!busy) onCheckUpdate();
-        }}
-        disabled={busy}
-        title="Check for updates"
-        aria-label="Check for updates"
-      >
-        <img
-          className="macos-titlebar-logo"
-          src={logoMark}
-          alt=""
-          width={22}
-          height={22}
-          draggable={false}
-        />
-        <div className="macos-titlebar-copy">
-          <span className="macos-titlebar-name text-title-gradient">ZtidalCode</span>
-          {statusLine ? (
-            <span className="macos-titlebar-version">{statusLine}</span>
+      <div className="macos-titlebar-controls">
+        <button
+          type="button"
+          className={`macos-titlebar-brand${
+            checkStatus !== "idle" ? ` is-${checkStatus}` : ""
+          }`}
+          onClick={() => {
+            if (!busy) onCheckUpdate();
+          }}
+          disabled={busy}
+          title="Check for updates"
+          aria-label="Check for updates"
+        >
+          <img
+            className="macos-titlebar-logo"
+            src={logoMark}
+            alt=""
+            width={22}
+            height={22}
+            draggable={false}
+          />
+          <div className="macos-titlebar-copy">
+            <span className="macos-titlebar-name text-title-gradient">
+              ZtidalCode
+            </span>
+            <span className="macos-titlebar-subtitle">
+              ZtidalCode for Grok Build
+            </span>
+            {statusLine ? (
+              <span className="macos-titlebar-version">{statusLine}</span>
+            ) : null}
+          </div>
+        </button>
+
+        <div className="macos-settings" ref={settingsRef}>
+          <button
+            type="button"
+            className="desktop-settings-trigger macos-settings-trigger"
+            ref={settingsTriggerRef}
+            aria-label="Settings"
+            title="Settings (⌘,)"
+            aria-expanded={settingsOpen}
+            aria-haspopup="dialog"
+            aria-controls={settingsOpen ? settingsPanelId : undefined}
+            onClick={() => setSettingsOpen((open) => !open)}
+          >
+            <SettingsGearIcon />
+          </button>
+          {settingsOpen ? (
+            <MacosSettingsPanel
+              id={settingsPanelId}
+              version={version}
+              updateBusy={busy}
+              onCheckUpdate={onCheckUpdate}
+              onClose={closeSettingsAndRestoreFocus}
+              onWindowError={onWindowError}
+            />
           ) : null}
         </div>
-      </button>
+      </div>
     </div>
   );
 }

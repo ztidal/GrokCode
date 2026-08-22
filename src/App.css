@@ -1,6 +1,7 @@
 @import "./styles/base.css";
 @import "./styles/status.css";
 @import "./styles/workspace.css";
+@import "./styles/desktop-settings.css";
 @import "./styles/macos-titlebar.css";
 @import "./styles/windows-titlebar.css";
 @import "./styles/detail.css";

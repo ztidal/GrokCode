@@ -1,7 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useId, useRef, useState } from "react";
-import { openNewWindow } from "../api";
-import { ThemeToggle } from "./ThemeToggle";
 import logoMark from "../assets/logo.png";
 import type { UpdateCheckStatus } from "../hooks/useAppUpdate";
 import { useAppVersion } from "../hooks/useAppVersion";
@@ -11,6 +9,10 @@ import {
   windowsUpdateStatusLabel,
   type WindowCommand,
 } from "../utils/windowsTitlebar";
+import {
+  DesktopSettingsPanel,
+  SettingsGearIcon,
+} from "./DesktopSettings";
 
 /** Windows-only custom chrome so Settings sits in the title bar, not below it. */
 export function WindowsTitlebar({
@@ -23,7 +25,6 @@ export function WindowsTitlebar({
   onWindowError: (message: string) => void;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [openingWindow, setOpeningWindow] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const settingsTriggerRef = useRef<HTMLButtonElement>(null);
   const settingsPanelId = useId();
@@ -56,26 +57,15 @@ export function WindowsTitlebar({
 
   const busy = checkStatus === "checking";
   const status = windowsUpdateStatusLabel(checkStatus);
+  const closeSettingsAndRestoreFocus = () => {
+    setSettingsOpen(false);
+    settingsTriggerRef.current?.focus();
+  };
   const invokeWindowCommand = (
     command: WindowCommand,
     invoke: () => Promise<void>,
   ) => {
     void runWindowCommand(command, invoke, onWindowError);
-  };
-
-  // A second window is a second process, so it takes long enough to be worth
-  // showing — and long enough for an impatient second click to start a third.
-  const openWindow = async () => {
-    setOpeningWindow(true);
-    try {
-      await openNewWindow();
-      setSettingsOpen(false);
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      onWindowError(`Failed to open a new window: ${detail}`);
-    } finally {
-      setOpeningWindow(false);
-    }
   };
 
   return (
@@ -99,63 +89,28 @@ export function WindowsTitlebar({
 
       <div className="windows-settings" ref={settingsRef}>
         <button
-          className="windows-settings-trigger"
+          className="desktop-settings-trigger windows-settings-trigger"
           type="button"
           ref={settingsTriggerRef}
+          aria-label="Settings"
+          title="Settings"
           aria-expanded={settingsOpen}
+          aria-haspopup="dialog"
           aria-controls={settingsOpen ? settingsPanelId : undefined}
           onClick={() => setSettingsOpen((open) => !open)}
         >
-          <span>Settings</span>
-          <svg
-            className="windows-settings-chevron"
-            viewBox="0 0 16 16"
-            width="12"
-            height="12"
-            aria-hidden
-          >
-            <path d="m4 6 4 4 4-4" />
-          </svg>
+          <SettingsGearIcon />
         </button>
         {settingsOpen ? (
-          <div
+          <DesktopSettingsPanel
             className="windows-settings-menu"
             id={settingsPanelId}
-            aria-label="Settings"
-          >
-            <button
-              className="windows-settings-item"
-              type="button"
-              disabled={openingWindow}
-              onClick={() => {
-                void openWindow();
-              }}
-            >
-              <span>New Window</span>
-              {openingWindow ? (
-                <span className="windows-settings-item-status">Opening…</span>
-              ) : null}
-            </button>
-            <div className="windows-settings-separator" aria-hidden />
-            <button
-              className="windows-settings-item"
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                onCheckUpdate();
-                setSettingsOpen(false);
-              }}
-            >
-              <span>Check for Updates</span>
-            </button>
-            <div className="windows-settings-separator" aria-hidden />
-            <ThemeToggle />
-            <div className="windows-settings-separator" aria-hidden />
-            <div className="windows-settings-version">
-              <span>Current version</span>
-              <span>{version ? `v${version}` : "—"}</span>
-            </div>
-          </div>
+            version={version}
+            updateBusy={busy}
+            onCheckUpdate={onCheckUpdate}
+            onClose={closeSettingsAndRestoreFocus}
+            onWindowError={onWindowError}
+          />
         ) : null}
       </div>
 

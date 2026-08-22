@@ -1128,6 +1128,7 @@ function App() {
           <MacosTitlebarBrand
             onCheckUpdate={checkForUpdate}
             checkStatus={updateCheckStatus}
+            onWindowError={setError}
           />
           <StatsBar
             tokenSeries={tokenSeries}

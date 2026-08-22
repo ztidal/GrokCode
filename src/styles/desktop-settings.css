@@ -1,0 +1,140 @@
+/* Shared Settings affordance and menu body for macOS and Windows chrome. */
+.desktop-settings-trigger,
+.desktop-settings-item {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.desktop-settings-trigger {
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.settings-gear-icon {
+  display: block;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.desktop-settings-panel {
+  width: 208px;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg-menu);
+  box-shadow: var(--shadow-md);
+  user-select: none;
+}
+
+.desktop-settings-item {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+}
+
+.desktop-settings-item:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.desktop-settings-item:disabled {
+  cursor: default;
+  opacity: 0.68;
+}
+
+.desktop-settings-trigger:focus-visible,
+.desktop-settings-item:focus-visible,
+.theme-toggle-option:focus-visible {
+  outline: 2px solid var(--live);
+  outline-offset: -2px;
+}
+
+/* Trailing note on an item while its longer-running action is in progress. */
+.desktop-settings-item-status {
+  color: var(--text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.desktop-settings-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+.desktop-settings-version {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 9px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Theme chooser inside the shared Settings menu. */
+.theme-toggle-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 9px 9px;
+}
+
+.theme-toggle-label,
+.theme-toggle-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+/* Five choices wrap over two columns so even “Pure Dark” stays readable. */
+.theme-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-hover);
+}
+
+.theme-toggle-option {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.theme-toggle-option:hover {
+  color: var(--text);
+}
+
+.theme-toggle-option[aria-checked="true"] {
+  background: var(--bg-menu);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
