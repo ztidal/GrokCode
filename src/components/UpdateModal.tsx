@@ -11,8 +11,8 @@ interface Props {
 type Phase = "prompt" | "downloading" | "installing" | "done" | "error";
 
 /**
- * In-app update prompt. Changelog is `update.body` from latest.json `notes`
- * (pipeline: prepare-notes → release body → rewrite-updater-json).
+ * In-app update prompt. Changelog is `update.body` from latest.json `notes`,
+ * written by scripts/make-updater-json.mjs at release time.
  * This component only displays — it does not invent or filter notes.
  */
 export function UpdateModal({ update, onDismiss }: Props) {

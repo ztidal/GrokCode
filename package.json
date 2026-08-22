@@ -11,19 +11,18 @@
   ],
   "author": "3xian <suffixtree@gmail.com>",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/3xian/PinkCode#readme",
+  "homepage": "https://ztidal.github.io/ZtidalCode-dist/",
   "bugs": {
-    "url": "https://github.com/3xian/PinkCode/issues"
+    "url": "https://github.com/ztidal/ZtidalCode/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/3xian/PinkCode.git"
+    "url": "git+https://github.com/ztidal/ZtidalCode.git"
   },
   "files": [
     ".nvmrc",
     "contracts",
     "docs/logo.png",
-    "docs/product.jpg",
     "index.html",
     "public",
     "scripts",
