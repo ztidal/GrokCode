@@ -103,8 +103,8 @@ silently — nothing fails, the words are just wrong. So a release also means:
 The **Windows PC builds Windows**. The **Mac release owner owns the release**: it fixes the version and
 source commit, builds Apple Silicon, receives the Windows artifacts, creates the complete manifest, updates
 the dist documentation, and is the only side that turns the GitHub draft into a public release. The Windows
-helper can create or update that draft with `--draft`, but it has no path that publishes it: a Windows-only
-`latest.json` must never become the live update channel.
+helper can create that draft with `--draft`, but it refuses any existing tag and has no path that publishes
+it: a Windows-only `latest.json` must never become the live update channel.
 
 ### One version, one source commit
 
@@ -126,69 +126,112 @@ version bump already committed by the owner, run this from a clean `hardening` b
 
 ```powershell
 npm ci
-npm run release -- --no-commit --notes-file NOTES.md --key C:\secure\ztidalcode.key --draft
+npm run release -- --no-commit --notes-file C:\release\ZtidalCode-NOTES.md --key C:\secure\ztidalcode.key --draft
 git rev-parse HEAD
 ```
 
+Keep the notes file outside the checkout: the helper deliberately refuses an untracked or otherwise dirty
+release tree.
+
 The command generates a Windows-only feed and checksums locally so it can verify the build, then creates
-or updates draft `v<version>` with only these four release assets; it never uploads the partial metadata
+draft `v<version>` with only these four release assets; it never uploads the partial metadata
 or makes the draft public:
 
 - `ZtidalCode_<version>_x64-setup.exe` and its `.sig`
 - `ZtidalCode_<version>_x64_en-US.msi` and its `.sig`
 
-The out-of-band handoff to the Mac owner also needs the full source SHA, version, and
-`src-tauri/target/release/PinkCode.exe`. This raw executable is **provenance input, not a release asset**:
-the feed generator inspects it to prove that the Windows installers were built with ZtidalCode's updater
-key rather than upstream's. Never upload it or substitute an executable from another build.
-
-On an Apple Silicon Mac, the native build command is:
+Windows staging is immutable. If that exact tag already exists, the helper refuses to upload or
+`--clobber` anything. After a failed staging attempt, the Mac release owner must inspect and explicitly
+delete the failed draft and its tag before Windows retries; never turn a partial draft into an in-place
+restage:
 
 ```bash
-npm ci
-export TAURI_SIGNING_PRIVATE_KEY="$(cat /path/to/ztidalcode.key)"
-export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
-npm run tauri -- build --config branding/ztidalcode.json
-git rev-parse HEAD
+gh release delete "v<version>" \
+  --repo ztidal/ZtidalCode-dist \
+  --cleanup-tag \
+  --yes
 ```
 
-It produces the first-install DMG plus the signed updater archive:
+The out-of-band handoff to the Mac owner also needs the full source SHA, version, and
+`src-tauri/target/release/PinkCode.exe`, plus the generated
+`src-tauri/target/release/windows-handoff.json`. The JSON binds the full source SHA to SHA-256 hashes of
+the raw executable and all four Windows release assets. The raw executable and JSON are **provenance
+inputs, not release assets**: the Mac finalizer recalculates their hashes, and the feed generator inspects
+the executable to prove that the installers were built with ZtidalCode's updater key rather than
+upstream's. Transfer both out of band; never upload them or substitute files from another build.
 
-- `src-tauri/target/release/bundle/dmg/ZtidalCode_<version>_aarch64.dmg`
-- `src-tauri/target/release/bundle/macos/ZtidalCode.app.tar.gz` and its `.sig`
+### Stage the Windows handoff before finalizing
 
-The `.dmg` is for a person installing the app; the updater must download the `.app.tar.gz`. We currently
-publish Apple Silicon only. Do not add `darwin-x86_64` keys unless a matching Intel archive has actually
-been built, signed, and verified.
-
-### Assemble before publishing
-
-The Mac owner places the Windows handoff into the native Mac build tree so the bundle root has this shape.
-The raw Windows executable stays one level above `bundle`; the Mac executable stays inside the `.app`:
+On an Apple Silicon Mac, run `npm ci` in the clean checkout, then place the Windows handoff into the
+fixed release paths below. The raw Windows executable and handoff JSON stay one level above `bundle`:
 
 ```text
 src-tauri/target/release/
 ├── PinkCode.exe                              # provenance only; do not upload
+├── windows-handoff.json                      # provenance only; do not upload
 └── bundle/
     ├── nsis/ZtidalCode_<version>_x64-setup.exe{,.sig}
-    ├── msi/ZtidalCode_<version>_x64_en-US.msi{,.sig}
-    ├── dmg/ZtidalCode_<version>_aarch64.dmg
-    └── macos/
-        ├── ZtidalCode.app.tar.gz{,.sig}
-        └── ZtidalCode.app/Contents/MacOS/PinkCode
+    └── msi/ZtidalCode_<version>_x64_en-US.msi{,.sig}
 ```
 
-From that assembled tree, generate the feed and checksums with the repository helper:
+Do not prebuild or copy Mac artifacts into this tree. The finalizer deliberately ignores any old
+`src-tauri/target/release/bundle/dmg` or `bundle/macos` contents. It builds the Mac-owned artifacts once
+from the verified checkout in a new temporary `CARGO_TARGET_DIR`, using the explicit
+`aarch64-apple-darwin` target, and removes that directory on both success and failure.
+
+Transfer `PinkCode.exe` and `windows-handoff.json` out of band. The four public Windows assets can be
+downloaded from the authenticated draft and placed in their fixed directories on the Mac:
 
 ```bash
-npm run updater:json -- \
-  --bundle-dir src-tauri/target/release/bundle \
-  --notes-file NOTES.md
+ZTIDAL_VERSION="$(node -p "require('./branding/ztidalcode.json').version")"
+ZTIDAL_WINDOWS="$(mktemp -d)"
+gh release download "v${ZTIDAL_VERSION}" \
+  --repo ztidal/ZtidalCode-dist \
+  --pattern "ZtidalCode_${ZTIDAL_VERSION}_x64*" \
+  --dir "${ZTIDAL_WINDOWS}"
+mkdir -p src-tauri/target/release/bundle/nsis src-tauri/target/release/bundle/msi
+cp "${ZTIDAL_WINDOWS}/ZtidalCode_${ZTIDAL_VERSION}_x64-setup.exe"{,.sig} \
+  src-tauri/target/release/bundle/nsis/
+cp "${ZTIDAL_WINDOWS}/ZtidalCode_${ZTIDAL_VERSION}_x64_en-US.msi"{,.sig} \
+  src-tauri/target/release/bundle/msi/
 ```
 
-It verifies the signatures and both platform binaries before creating one `latest.json`. Its top-level
-`version`, `notes`, and `pub_date` describe the same release, and its `platforms` object contains all five
-entries:
+From that Windows-only staging tree, run the fail-closed Mac finalizer with the exact source SHA. The
+private key is selected in this order: a non-empty `TAURI_SIGNING_PRIVATE_KEY`, `--key`, then
+`ZTIDAL_SIGNING_KEY_FILE`. The password, if any, is accepted only through
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`:
+
+```bash
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+npm run release:finalize -- \
+  --expected-sha "$(git rev-parse HEAD)" \
+  --windows-handoff src-tauri/target/release/windows-handoff.json \
+  --notes-file /path/to/ZtidalCode-NOTES.md \
+  --key /path/to/ztidalcode.key
+```
+
+The finalizer requires a clean `hardening` checkout at that full SHA, recalculates all five Windows
+handoff hashes, snapshots their bytes into the fresh target, and requires the exact GitHub release to
+still be a draft containing only those four public Windows assets with matching digests. It gives the
+signing key only to the native build child; Git, the feed generator, and GitHub CLI run without the key or
+password. The combined generator verifies the signatures and both platform binaries before creating one
+`latest.json`. Immediately before upload, the finalizer rechecks the source, staged bytes, notes, metadata,
+and draft digests. It then uploads the fresh arm64 DMG, app archive, archive signature, and two metadata
+files without `--clobber`, updates the title and notes, checks for exactly nine assets with matching
+digests, and deliberately leaves the release as a draft.
+
+The `.dmg` is for a person installing the app; the updater downloads `ZtidalCode.app.tar.gz`. We currently
+publish Apple Silicon only. Do not add `darwin-x86_64` keys unless a matching Intel archive has actually
+been built, signed, and verified.
+
+If upload or release editing fails after some Mac-owned files have reached the draft, it stays safely
+unpublished. Inspect the draft, delete any of these five partial assets with
+`gh release delete-asset <tag> <name> --repo ztidal/ZtidalCode-dist --yes`, then rerun the finalizer:
+`latest.json`, `SHA256SUMS.txt`, the arm64 DMG, `ZtidalCode.app.tar.gz`, and its `.sig`. Do not recover with
+`--clobber`, because that would hide which state was actually verified.
+
+The generated feed's top-level `version`, `notes`, and `pub_date` describe the same release, and its
+`platforms` object contains all five entries:
 
 | Key | Artifact |
 |---|---|
@@ -203,38 +246,20 @@ avoidable ambiguity; replacing the manifest with a Mac-only or Windows-only obje
 other platform. `SHA256SUMS.txt` uses the flat GitHub asset names and covers the Windows installers, the
 DMG, the app updater archive, and the Mac archive signature.
 
-After assembling and verifying both platforms, replace the Windows-only manifest and checksums in draft
-`v<version>` and add the Mac assets. Upload only published assets — never the raw `PinkCode.exe` provenance
-input:
-
-```bash
-ZTIDAL_VERSION="$(node -p "require('./branding/ztidalcode.json').version")"
-gh release upload "v${ZTIDAL_VERSION}" \
-  --repo ztidal/ZtidalCode-dist \
-  --clobber \
-  latest.json SHA256SUMS.txt \
-  "src-tauri/target/release/bundle/dmg/ZtidalCode_${ZTIDAL_VERSION}_aarch64.dmg" \
-  src-tauri/target/release/bundle/macos/ZtidalCode.app.tar.gz \
-  src-tauri/target/release/bundle/macos/ZtidalCode.app.tar.gz.sig
-
-gh release edit "v${ZTIDAL_VERSION}" \
-  --repo ztidal/ZtidalCode-dist \
-  --title "ZtidalCode ${ZTIDAL_VERSION}" \
-  --notes-file NOTES.md
-```
-
 Verify the complete manifest, checksums, release notes, and every uploaded artifact before making it public.
 At minimum:
 
 - every manifest URL names the same release tag and returns the expected bytes;
 - every embedded signature verifies those exact bytes with the branding public key;
 - the app/installer versions and recorded source SHA match;
+- mount the DMG and confirm its app version and arm64 executable match the signed updater archive;
 - the five keys above are present and the release body matches `latest.json` notes;
 - the dist README and Pages describe the controls and platforms that actually shipped.
 
 Only after all checks pass should the Mac owner run:
 
 ```bash
+ZTIDAL_VERSION="$(node -p "require('./branding/ztidalcode.json').version")"
 gh release edit "v${ZTIDAL_VERSION}" --repo ztidal/ZtidalCode-dist --draft=false
 ```
 

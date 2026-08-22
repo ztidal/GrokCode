@@ -29,6 +29,7 @@
  *   --tag <tag>         release tag the assets live under        (default `v<version>`)
  *   --bundle-dir <dir>  where the bundles are                    (default src-tauri/target/release/bundle)
  *   --exe <path>        the built binary the provenance check reads  (default <bundle-dir>/../<name>.exe)
+ *   --mode <mode>       auto, windows, mac or combined                (default auto)
  *   --out <path>        output file                              (default latest.json)
  *   --pub-date <iso>    publication date                         (default now)
  */
@@ -42,12 +43,42 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 function arg(name, fallback = null) {
   const i = process.argv.indexOf(`--${name}`);
-  return i === -1 || i === process.argv.length - 1 ? fallback : process.argv[i + 1];
+  return i === -1 ? fallback : process.argv[i + 1];
 }
 
 function die(message) {
   console.error(`make-updater-json: ${message}`);
   process.exit(1);
+}
+
+const valueFlags = new Set([
+  "notes",
+  "notes-file",
+  "tag",
+  "bundle-dir",
+  "exe",
+  "mode",
+  "out",
+  "pub-date",
+]);
+const seenFlags = new Set();
+for (let index = 2; index < process.argv.length; index += 1) {
+  const token = process.argv[index];
+  if (!token.startsWith("--")) die(`unexpected argument ${token}`);
+  const name = token.slice(2);
+  if (!valueFlags.has(name)) die(`unknown flag ${token}`);
+  if (seenFlags.has(name)) die(`duplicate flag ${token}`);
+  seenFlags.add(name);
+  const value = process.argv[index + 1];
+  if (value === undefined || value.startsWith("--")) {
+    die(`${token} needs a value`);
+  }
+  index += 1;
+}
+
+const mode = arg("mode", "auto");
+if (!["auto", "windows", "mac", "combined"].includes(mode)) {
+  die(`--mode must be auto, windows, mac or combined; got ${mode}`);
 }
 
 // --- identity: version, trust anchor and feed all come from the branding overlay ------------
@@ -66,18 +97,44 @@ if (!version || !pubkeyB64 || !endpoint) {
 const repoMatch = endpoint.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/releases\//);
 if (!repoMatch) die(`cannot derive the repository from the updater endpoint: ${endpoint}`);
 const tag = arg("tag", `v${version}`);
+if (tag !== `v${version}`) {
+  die(`--tag ${tag} does not match branding version ${version}; expected v${version}`);
+}
 const downloadBase = `https://github.com/${repoMatch[1]}/releases/download/${tag}`;
 
 const notesFile = arg("notes-file");
+if (notesFile && arg("notes")) die("--notes and --notes-file are mutually exclusive");
 const notes = (notesFile ? readFileSync(notesFile, "utf8") : arg("notes", "")).trim();
 // Fail closed: an empty changelog means the UpdateModal shows a version bump and nothing else.
 if (!notes) die("--notes or --notes-file is required");
 
 // --- minisign verification, matching tauri-plugin-updater's `verify_signature` ---------------
 
-/** Decode a minisign key/signature line into `{ algorithm, keyId, bytes }`. */
-function decodeLine(line) {
-  const raw = Buffer.from(line.trim(), "base64");
+function decodeCanonicalBase64(value, label, expectedBytes = null) {
+  if (typeof value !== "string" || value.length === 0 || /\s/.test(value)) {
+    throw new Error(`${label} is not canonical base64`);
+  }
+  const raw = Buffer.from(value, "base64");
+  if (raw.toString("base64") !== value) {
+    throw new Error(`${label} is not canonical base64`);
+  }
+  if (expectedBytes !== null && raw.length !== expectedBytes) {
+    throw new Error(`${label} decodes to ${raw.length} bytes, expected ${expectedBytes}`);
+  }
+  return raw;
+}
+
+function decodeUtf8(raw, label) {
+  const text = raw.toString("utf8");
+  if (!Buffer.from(text, "utf8").equals(raw)) {
+    throw new Error(`${label} is not valid UTF-8`);
+  }
+  return text;
+}
+
+/** Decode a strict minisign key/signature record into `{ algorithm, keyId, bytes }`. */
+function decodeRecord(line, label, expectedBytes) {
+  const raw = decodeCanonicalBase64(line, label, expectedBytes);
   return {
     algorithm: raw.subarray(0, 2).toString("latin1"),
     keyId: raw.subarray(2, 10),
@@ -85,8 +142,33 @@ function decodeLine(line) {
   };
 }
 
-const pubText = Buffer.from(pubkeyB64, "base64").toString("utf8");
-const pub = decodeLine(pubText.trim().split("\n")[1]);
+let pubText;
+try {
+  pubText = decodeUtf8(
+    decodeCanonicalBase64(pubkeyB64, "updater public-key wrapper"),
+    "updater public-key document",
+  );
+} catch (error) {
+  die(error.message);
+}
+const pubLines = pubText.endsWith("\n")
+  ? pubText.slice(0, -1).split("\n")
+  : pubText.split("\n");
+if (
+  pubLines.length !== 2 ||
+  !pubLines[0].startsWith("untrusted comment: ")
+) {
+  die("updater public-key document must contain one comment and one key line");
+}
+let pub;
+try {
+  pub = decodeRecord(pubLines[1], "updater public-key record", 42);
+} catch (error) {
+  die(error.message);
+}
+if (pub.algorithm !== "Ed") {
+  die(`unsupported updater public-key algorithm ${pub.algorithm}`);
+}
 const publicKey = createPublicKey({
   // SPKI prefix for Ed25519, so node can take the 32 raw key bytes.
   key: Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), pub.bytes.subarray(0, 32)]),
@@ -99,10 +181,33 @@ const publicKey = createPublicKey({
  * Returns the trusted comment; throws with the reason if anything does not line up.
  */
 function verifyBundle(bytes, signatureB64, expectedName) {
-  const lines = Buffer.from(signatureB64, "base64").toString("utf8").split("\n");
-  const sig = decodeLine(lines[1]);
-  const trustedComment = lines[2].replace(/^trusted comment: /, "");
-  const globalSig = Buffer.from(lines[3].trim(), "base64");
+  const documentBytes = decodeCanonicalBase64(
+    signatureB64,
+    "signature wrapper",
+  );
+  const document = decodeUtf8(documentBytes, "signature document");
+  const lines = document.endsWith("\n")
+    ? document.slice(0, -1).split("\n")
+    : document.split("\n");
+  if (lines.length !== 4) {
+    throw new Error("signature document must contain exactly four lines");
+  }
+  if (!lines[0].startsWith("untrusted comment: ")) {
+    throw new Error("signature document has no untrusted comment line");
+  }
+  if (!lines[2].startsWith("trusted comment: ")) {
+    throw new Error("signature document has no trusted comment line");
+  }
+  const sig = decodeRecord(lines[1], "signature record", 74);
+  if (sig.algorithm !== "Ed" && sig.algorithm !== "ED") {
+    throw new Error(`unsupported minisign algorithm ${sig.algorithm}`);
+  }
+  const trustedComment = lines[2].slice("trusted comment: ".length);
+  const globalSig = decodeCanonicalBase64(
+    lines[3],
+    "global signature",
+    64,
+  );
 
   if (!pub.keyId.equals(sig.keyId)) {
     throw new Error(
@@ -210,35 +315,54 @@ function verifyBrandedBytes(bytes, name) {
 }
 
 function verifyBrandedBinary(path) {
-  verifyBrandedBytes(readFileSync(path), basename(path));
+  const bytes = readFileSync(path);
+  const peOffset = bytes.length >= 0x40 ? bytes.readUInt32LE(0x3c) : -1;
+  const isX64Pe =
+    bytes.subarray(0, 2).toString("ascii") === "MZ" &&
+    peOffset >= 0 &&
+    peOffset + 6 <= bytes.length &&
+    bytes.subarray(peOffset, peOffset + 4).equals(Buffer.from("PE\0\0", "binary")) &&
+    bytes.readUInt16LE(peOffset + 4) === 0x8664;
+  if (!isX64Pe) die(`${basename(path)} is not an x86_64 PE executable`);
+  verifyBrandedBytes(bytes, basename(path));
 }
 
 // --- collect the bundles ----------------------------------------------------------------------
 
-/** Newest bundle in `<bundleDir>/<subdir>` whose name ends with `ext` (ignoring `.sig` files). */
-function findBundle(subdir, ext) {
+/** Find the exact versioned x64 bundle, refusing a stale or differently named substitute. */
+function findBundle(subdir, expectedName, ext) {
   const dir = join(bundleDir, subdir);
   if (!existsSync(dir)) return null;
   const hits = readdirSync(dir).filter((n) => n.endsWith(ext) && !n.endsWith(".sig"));
   if (hits.length === 0) return null;
-  if (hits.length > 1) {
-    die(`${dir} holds more than one ${ext}: ${hits.join(", ")} — clean it before publishing`);
+  if (hits.length !== 1 || hits[0] !== expectedName) {
+    die(`${dir} holds ${hits.join(", ")}; expected ${expectedName} only`);
   }
-  return join(dir, hits[0]);
+  return join(dir, expectedName);
 }
 
 // `windows-x86_64` is the fallback the updater reaches for when it cannot tell how the client was
 // installed; NSIS is the installer we hand to everyone else, so it is the safe default there.
 const installers = [
-  { keys: ["windows-x86_64-nsis", "windows-x86_64"], subdir: "nsis", ext: "-setup.exe" },
-  { keys: ["windows-x86_64-msi"], subdir: "msi", ext: ".msi" },
+  {
+    keys: ["windows-x86_64-nsis", "windows-x86_64"],
+    subdir: "nsis",
+    ext: "-setup.exe",
+    expectedName: `${branding.productName}_${version}_x64-setup.exe`,
+  },
+  {
+    keys: ["windows-x86_64-msi"],
+    subdir: "msi",
+    ext: ".msi",
+    expectedName: `${branding.productName}_${version}_x64_en-US.msi`,
+  },
 ];
 
 const platforms = {};
 const checksums = [];
 const windowsBundles = installers.map((installer) => ({
   ...installer,
-  path: findBundle(installer.subdir, installer.ext),
+  path: findBundle(installer.subdir, installer.expectedName, installer.ext),
 }));
 const hasAnyWindowsArtifact =
   existsSync(binary) || windowsBundles.some(({ path }) => path !== null);
@@ -364,13 +488,46 @@ if (hasAnyMacArtifact) {
   }
 }
 
-if (Object.keys(platforms).length === 0) {
+const platformKeys = Object.keys(platforms);
+if (platformKeys.length === 0) {
   die(`no Windows or arm64 macOS updater bundles found under ${bundleDir}`);
+}
+
+const keysByMode = {
+  windows: ["windows-x86_64-nsis", "windows-x86_64", "windows-x86_64-msi"],
+  mac: ["darwin-aarch64-app", "darwin-aarch64"],
+  combined: [
+    "windows-x86_64-nsis",
+    "windows-x86_64",
+    "windows-x86_64-msi",
+    "darwin-aarch64-app",
+    "darwin-aarch64",
+  ],
+};
+if (mode !== "auto") {
+  const required = keysByMode[mode];
+  const missing = required.filter((key) => !platforms[key]);
+  const unexpected = platformKeys.filter((key) => !required.includes(key));
+  const expectedChecksumCount = mode === "windows" ? 2 : mode === "mac" ? 3 : 5;
+  if (missing.length || unexpected.length || checksums.length !== expectedChecksumCount) {
+    die(
+      `${mode} mode is missing platform keys [${missing.join(", ")}]` +
+        `, has unexpected keys [${unexpected.join(", ")}]` +
+        `, and has ${checksums.length}/${expectedChecksumCount} checksums`,
+    );
+  }
 }
 
 // --- emit -------------------------------------------------------------------------------------
 
 const pubDate = arg("pub-date", new Date().toISOString().replace(/\.\d{3}Z$/, "Z"));
+if (
+  !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(pubDate) ||
+  Number.isNaN(Date.parse(pubDate)) ||
+  new Date(pubDate).toISOString().replace(".000Z", "Z") !== pubDate
+) {
+  die(`--pub-date must be an RFC3339 UTC timestamp without fractional seconds; got ${pubDate}`);
+}
 const out = arg("out", join(process.cwd(), "latest.json"));
 writeFileSync(out, `${JSON.stringify({ version, notes, pub_date: pubDate, platforms }, null, 2)}\n`);
 

@@ -24,11 +24,16 @@ npm run tauri -- build --config branding/ztidalcode.json
 ```
 
 The Windows PC uses `npm run release -- --no-commit ... --draft` to build and verify Windows artifacts from
-the exact release commit and stage them in a GitHub draft; the helper never publishes it. The Mac release
-owner builds Apple Silicon from the same SHA, combines both platforms into one five-key `latest.json`, and
-publishes the completed draft. See `branding/README.md`; neither side may publish a one-platform manifest.
+the exact release commit, write `src-tauri/target/release/windows-handoff.json`, and stage only four Windows
+assets in a GitHub draft; the helper never publishes it. The Mac release owner builds Apple Silicon from
+the same SHA by running
+`npm run release:finalize -- --expected-sha ... --windows-handoff ... --notes-file ... [--key ...]`.
+That command ignores prebuilt Mac bundles, uses a fresh `CARGO_TARGET_DIR` and explicit Apple Silicon
+target, requires an exact Windows-only draft, combines both platforms into one five-key `latest.json`,
+uploads the Mac-owned half, and still leaves the release in draft for independent verification. See
+`branding/README.md`; neither side may publish a one-platform manifest.
 
-See `branding/README.md`. Without a signing key, add
+Without a signing key, add
 `--config '{"bundle":{"createUpdaterArtifacts":false}}'` to skip update artifacts — the result installs but
 can never be updated in place.
 

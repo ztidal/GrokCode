@@ -43,10 +43,14 @@ function makeKey() {
   };
 }
 
-function updaterSignature(bytes, filename, key) {
-  const fileSignature = sign(null, bytes, key.privateKey);
+function updaterSignature(bytes, filename, key, algorithm = "Ed") {
+  const message =
+    algorithm === "ED"
+      ? createHash("blake2b512").update(bytes).digest()
+      : bytes;
+  const fileSignature = sign(null, message, key.privateKey);
   const signatureLine = Buffer.concat([
-    Buffer.from("Ed", "latin1"),
+    Buffer.from(algorithm, "latin1"),
     key.keyId,
     fileSignature,
   ]).toString("base64");
@@ -71,6 +75,15 @@ function makeMachOBinary(cpuType, pubkey) {
   const header = Buffer.alloc(8);
   header.writeUInt32LE(0xfeedfacf, 0);
   header.writeUInt32LE(cpuType, 4);
+  return Buffer.concat([header, Buffer.from(pubkey, "utf8")]);
+}
+
+function makePeBinary(machine, pubkey) {
+  const header = Buffer.alloc(0x88);
+  header.write("MZ", 0, 2, "ascii");
+  header.writeUInt32LE(0x80, 0x3c);
+  header.write("PE\0\0", 0x80, 4, "binary");
+  header.writeUInt16LE(machine, 0x84);
   return Buffer.concat([header, Buffer.from(pubkey, "utf8")]);
 }
 
@@ -126,6 +139,15 @@ function signedBundle(path, bytes, key) {
   write(`${path}.sig`, updaterSignature(bytes, basename(path), key));
 }
 
+function rewriteWrappedSignature(path, rewrite) {
+  const wrapped = readFileSync(path, "utf8").trim();
+  const minisign = Buffer.from(wrapped, "base64").toString("utf8");
+  write(
+    path,
+    `${Buffer.from(rewrite(minisign), "utf8").toString("base64")}\n`,
+  );
+}
+
 function prepareReleaseTree() {
   const root = mkdtempSync(join(tmpdir(), "ztidal-updater-test-"));
   temporaryRepos.push(root);
@@ -167,7 +189,7 @@ function prepareReleaseTree() {
   const msiName = "ZtidalCode_9.8.7_x64_en-US.msi";
   signedBundle(join(bundle, "nsis", nsisName), Buffer.from("nsis"), key);
   signedBundle(join(bundle, "msi", msiName), Buffer.from("msi"), key);
-  write(join(root, "PinkCode.exe"), Buffer.from(`exe:${key.encodedPublicKey}`));
+  write(join(root, "PinkCode.exe"), makePeBinary(0x8664, key.encodedPublicKey));
 
   const archiveName = "ZtidalCode.app.tar.gz";
   const archiveBytes = appArchive({
@@ -218,7 +240,11 @@ function prepareReleaseTree() {
   };
 }
 
-function runGenerator(fixture) {
+function runGenerator(
+  fixture,
+  extraArgs = [],
+  pubDate = "2026-08-22T00:00:00Z",
+) {
   return spawnSync(
     process.execPath,
     [
@@ -230,7 +256,8 @@ function runGenerator(fixture) {
       "--notes",
       "Settings are easier to find.",
       "--pub-date",
-      "2026-08-22T00:00:00Z",
+      pubDate,
+      ...extraArgs,
     ],
     { encoding: "utf8" },
   );
@@ -309,6 +336,171 @@ describe("make-updater-json macOS release support", () => {
       `${sha256(fixture.archiveBytes)} *${fixture.archiveName}`,
       `${sha256(Buffer.from(fixture.archiveSignature, "utf8"))} *${fixture.archiveName}.sig`,
     ]);
+  });
+
+  it("accepts Tauri's prehashed ED minisign signature form", () => {
+    const fixture = prepareReleaseTree();
+    write(
+      `${fixture.archivePath}.sig`,
+      updaterSignature(
+        fixture.archiveBytes,
+        fixture.archiveName,
+        fixture.key,
+        "ED",
+      ),
+    );
+
+    const result = runGenerator(fixture, ["--mode", "combined"]);
+
+    expect(result.status, result.stderr).toBe(0);
+    const manifest = JSON.parse(readFileSync(fixture.output, "utf8"));
+    expect(manifest.platforms["darwin-aarch64"].signature).toBe(
+      readFileSync(`${fixture.archivePath}.sig`, "utf8").trim(),
+    );
+  });
+
+  it("combined mode refuses to write when the Windows half is absent", () => {
+    const fixture = prepareReleaseTree();
+    rmSync(join(fixture.bundle, "nsis"), { recursive: true });
+    rmSync(join(fixture.bundle, "msi"), { recursive: true });
+    rmSync(join(fixture.root, "PinkCode.exe"));
+
+    const result = runGenerator(fixture, ["--mode", "combined"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("combined mode is missing platform keys");
+  });
+
+  it("combined mode refuses to write when the Mac half is absent", () => {
+    const fixture = prepareReleaseTree();
+    rmSync(join(fixture.bundle, "macos"), { recursive: true });
+    rmSync(join(fixture.bundle, "dmg"), { recursive: true });
+
+    const result = runGenerator(fixture, ["--mode", "combined"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("combined mode is missing platform keys");
+  });
+
+  it("rejects a signed Windows bundle whose name belongs to another version", () => {
+    const fixture = prepareReleaseTree();
+    rmSync(join(fixture.bundle, "nsis"), { recursive: true });
+    signedBundle(
+      join(fixture.bundle, "nsis", "ZtidalCode_9.8.6_x64-setup.exe"),
+      Buffer.from("stale nsis"),
+      fixture.key,
+    );
+
+    const result = runGenerator(fixture);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("expected ZtidalCode_9.8.7_x64-setup.exe");
+  });
+
+  it("refuses to label an arm64 Windows executable as windows-x86_64", () => {
+    const fixture = prepareReleaseTree();
+    write(
+      join(fixture.root, "PinkCode.exe"),
+      makePeBinary(0xaa64, fixture.key.encodedPublicKey),
+    );
+
+    const result = runGenerator(fixture);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("PinkCode.exe is not an x86_64 PE executable");
+  });
+
+  it("rejects unknown flags instead of falling back to default paths", () => {
+    const fixture = prepareReleaseTree();
+
+    const result = runGenerator(fixture, ["--mod", "combined"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("unknown flag --mod");
+  });
+
+  it("rejects duplicate flags instead of silently taking the first value", () => {
+    const fixture = prepareReleaseTree();
+
+    const result = runGenerator(fixture, [
+      "--mode",
+      "combined",
+      "--mode",
+      "windows",
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("duplicate flag --mode");
+  });
+
+  it("rejects calendar dates that only look like RFC3339 timestamps", () => {
+    const fixture = prepareReleaseTree();
+
+    const result = runGenerator(
+      fixture,
+      [],
+      "2026-02-30T00:00:00Z",
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("--pub-date must be an RFC3339 UTC timestamp");
+  });
+
+  it("rejects a non-canonical outer base64 updater signature", () => {
+    const fixture = prepareReleaseTree();
+    const signaturePath = join(
+      fixture.bundle,
+      "nsis",
+      `${fixture.nsisName}.sig`,
+    );
+    write(
+      signaturePath,
+      `${readFileSync(signaturePath, "utf8").trim()}!\n`,
+    );
+
+    const result = runGenerator(fixture);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("signature wrapper is not canonical base64");
+  });
+
+  it("rejects an updater signature with an unsupported minisign algorithm", () => {
+    const fixture = prepareReleaseTree();
+    const signaturePath = join(
+      fixture.bundle,
+      "nsis",
+      `${fixture.nsisName}.sig`,
+    );
+    rewriteWrappedSignature(signaturePath, (minisign) => {
+      const lines = minisign.trimEnd().split("\n");
+      const record = Buffer.from(lines[1], "base64");
+      record.write("XX", 0, 2, "latin1");
+      lines[1] = record.toString("base64");
+      return `${lines.join("\n")}\n`;
+    });
+
+    const result = runGenerator(fixture);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("unsupported minisign algorithm XX");
+  });
+
+  it("rejects extra lines in the wrapped minisign document", () => {
+    const fixture = prepareReleaseTree();
+    const signaturePath = join(
+      fixture.bundle,
+      "nsis",
+      `${fixture.nsisName}.sig`,
+    );
+    rewriteWrappedSignature(
+      signaturePath,
+      (minisign) => `${minisign}unexpected trailing line\n`,
+    );
+
+    const result = runGenerator(fixture);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("signature document must contain exactly four lines");
   });
 
   it("rejects a macOS archive whose updater signature is stale", () => {

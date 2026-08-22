@@ -6,7 +6,8 @@
  *
  * Usage:
  *   npm run release -- --notes "what changed"           # build + verified feed, then stop
- *   npm run release -- --notes-file NOTES.md --draft     # Windows handoff; never publishes
+ *   npm run release -- --no-commit --notes-file C:\release\NOTES.md --draft
+ *                                                        # Windows handoff; never publishes
  *   npm run release -- --dry-run --notes "what changed" # preflight + plan, no writes at all
  *
  * `--help` lists every flag. If the build fails after the version commit, rerun with --no-commit —
@@ -16,6 +17,14 @@ import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  assertWindowsReleaseTagAbsent,
+  assertRemoteGitTagAbsent,
+  buildWindowsHandoff,
+  readRemoteGitTag,
+  readReleaseTag,
+  sanitizedReleaseEnvironment,
+} from "./release-contract.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // A sibling of this checkout (D:/…/ztidal-release-wt in the canonical layout), outside the repo so
@@ -51,9 +60,7 @@ function has(name) {
 
 // No child inherits the signing key by accident: the build gets it explicitly,
 // and gh / powershell / the feed script have no business seeing it at all.
-const cleanEnv = { ...process.env };
-delete cleanEnv.TAURI_SIGNING_PRIVATE_KEY;
-delete cleanEnv.TAURI_SIGNING_PRIVATE_KEY_PASSWORD;
+const cleanEnv = sanitizedReleaseEnvironment(process.env);
 
 function run(cmd, args, opts = {}) {
   console.log(`\n==> ${cmd} ${args.join(" ")}\n`);
@@ -86,13 +93,17 @@ options
   --key <path>         minisign private key file (see key sources below)
   --install            after verifying: run the NSIS setup with /P /R and confirm the
                        installed exe reports the new version
-  --draft              after verifying: create/update draft v<X.Y.Z> on ${distRepo}
-                       with only the two Windows installers and signatures; never publish
+  --draft              after verifying: create draft v<X.Y.Z> on ${distRepo};
+                       only the two Windows installers and signatures are staged; never publish. Refuses
+                       an existing tag instead of mutating already-staged release bytes
   --dry-run            preflight and plan only — writes nothing, commits nothing
   --help               this text
 
 With neither --install nor --draft the run stops after the verified artifacts and prints
 exactly what those flags would do.
+
+Every successful build writes src-tauri/target/release/windows-handoff.json for the Mac-side
+release owner. That provenance JSON and the raw PinkCode.exe are local handoff files, never uploaded.
 
 signing key — first source that answers wins; the contents are read in-process and exported only
 into the build child's environment, never onto a command line, into a file, or into output:
@@ -127,6 +138,10 @@ const dryRun = has("dry-run");
 const noCommit = has("no-commit");
 const doInstall = has("install");
 const doDraft = has("draft");
+
+if (doDraft && !noCommit) {
+  die("--draft requires --no-commit so Windows stages the Mac owner's committed release SHA");
+}
 
 // --- preflight: every refusal here is a release incident that already happened once -----------
 
@@ -163,7 +178,10 @@ if (process.env.TAURI_SIGNING_PRIVATE_KEY) {
   keyLabel = `contents of ${keyFile}, read at build time`;
 }
 
-if (doDraft && spawnSync("gh", ["--version"], { stdio: "ignore" }).status !== 0) {
+if (
+  doDraft &&
+  spawnSync("gh", ["--version"], { stdio: "ignore", env: cleanEnv }).status !== 0
+) {
   die("--draft needs the gh CLI on PATH");
 }
 if (doInstall && !process.env.LOCALAPPDATA) die("--install needs LOCALAPPDATA to find the installed exe");
@@ -226,6 +244,8 @@ const feedArgs = [
   bundleDir,
   "--out",
   join(repoRoot, "latest.json"),
+  "--mode",
+  "windows",
   ...(notesFile ? ["--notes-file", notesFile] : ["--notes", notesText]),
 ];
 
@@ -381,6 +401,21 @@ const windowsAssets = [
   msi,
   `${msi}.sig`,
 ];
+const windowsBinary = join(targetDir, "release", `${binaryName}.exe`);
+const windowsHandoff = buildWindowsHandoff({
+  productName,
+  version,
+  sourceSha: releaseSha,
+  windowsBinaryPath: windowsBinary,
+  assetPaths: windowsAssets,
+});
+const windowsHandoffPath = join(
+  targetDir,
+  "release",
+  "windows-handoff.json",
+);
+writeFileSync(windowsHandoffPath, `${JSON.stringify(windowsHandoff, null, 2)}\n`);
+console.log(`wrote Windows provenance handoff ${windowsHandoffPath}`);
 
 // --- install / Windows draft handoff ----------------------------------------------------------
 
@@ -403,7 +438,7 @@ if (doInstall) {
   const ps = spawnSync(
     "powershell",
     ["-NoProfile", "-Command", `(Get-Item -LiteralPath '${installedExe.replace(/'/g, "''")}').VersionInfo.ProductVersion`],
-    { encoding: "utf8" },
+    { encoding: "utf8", env: cleanEnv },
   );
   if (ps.status !== 0) die(`could not read ${installedExe}: ${(ps.stderr || "").trim()}`);
   const installed = ps.stdout.trim();
@@ -418,38 +453,34 @@ if (doDraft) {
   // The Windows builder never flips the release live. macOS bundles and the
   // complete cross-platform feed do not exist on this machine; publishing
   // here would make every Mac client see an incomplete latest.json.
-  const view = spawnSync(
-    "gh",
-    ["release", "view", `v${version}`, "--repo", distRepo, "--json", "isDraft"],
-    { encoding: "utf8", env: cleanEnv },
-  );
-  if (view.status === 0) {
-    if (!JSON.parse(view.stdout.trim()).isDraft) {
-      die(`v${version} is already published on ${distRepo}`);
-    }
-    console.log(`v${version} already exists as a draft; updating only the Windows-owned assets`);
-    run("gh", [
-      "release",
-      "upload",
-      `v${version}`,
-      "--repo",
-      distRepo,
-      "--clobber",
-      ...windowsAssets,
-    ]);
-    run("gh", [
-      "release",
-      "edit",
-      `v${version}`,
-      "--repo",
-      distRepo,
-      "--title",
-      `${productName} ${version}`,
-      ...(notesFile ? ["--notes-file", notesFile] : ["--notes", notesText]),
-    ]);
-  } else {
-    run("gh", draftArgs);
+  let remoteTag;
+  try {
+    remoteTag = readRemoteGitTag({
+      repo: distRepo,
+      tag: `v${version}`,
+      env: cleanEnv,
+    });
+    assertRemoteGitTagAbsent(remoteTag, {
+      repo: distRepo,
+      tag: `v${version}`,
+    });
+  } catch (error) {
+    die(error.message);
   }
+  const release = readReleaseTag({
+    repo: distRepo,
+    tag: `v${version}`,
+    env: cleanEnv,
+  });
+  try {
+    assertWindowsReleaseTagAbsent(release, {
+      repo: distRepo,
+      tag: `v${version}`,
+    });
+  } catch (error) {
+    die(error.message);
+  }
+  run("gh", draftArgs);
   console.log(`staged Windows assets in draft v${version}; the Mac-side release owner will finalize it`);
 }
 
