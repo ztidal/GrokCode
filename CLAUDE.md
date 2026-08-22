@@ -19,9 +19,12 @@ npm run check:rust     # cargo fmt + clippy -D warnings + cargo test
 Release bundles must be built through the identity overlay, or they carry upstream's name and updater:
 
 ```bash
-export TAURI_SIGNING_PRIVATE_KEY_PATH=/path/to/ztidalcode.key
+export TAURI_SIGNING_PRIVATE_KEY="$(cat /path/to/ztidalcode.key)"   # contents — Tauri ignores _PATH
 npm run tauri -- build --config branding/ztidalcode.json
 ```
+
+Releases go through `npm run release -- --help`: it builds from a clean detached worktree and
+refuses, by design, each mistake that has already shipped once by hand.
 
 See `branding/README.md`. Without a signing key, add
 `--config '{"bundle":{"createUpdaterArtifacts":false}}'` to skip update artifacts — the result installs but
