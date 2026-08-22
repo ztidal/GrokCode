@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # `hardening` is this repository's default branch; `main` is upstream's
+    # line and carries none of our changes.
+    branches: [hardening]
   pull_request:
 
 concurrency:
@@ -33,9 +35,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          # PR caches are scoped to that PR and cannot help main or another PR.
-          # Restore main's cache everywhere, but only pay the upload cost on main.
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # PR caches are scoped to that PR and cannot help hardening or another PR.
+          # Restore hardening's cache everywhere, but only pay the upload cost on hardening.
+          save-if: ${{ github.ref == 'refs/heads/hardening' }}
       # Keep the same commands as scripts/check-rust.mjs without installing the
       # unrelated frontend dependency tree in this job.
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
