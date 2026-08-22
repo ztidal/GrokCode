@@ -250,9 +250,10 @@ console.log(`  publish    ${doPublish ? `gh release create v${version} on ${dist
 function printChecklist() {
   console.log(`
 release checklist (branding/README.md — both halves of the dist repo go stale silently):
-  [ ] did usage change?    -> update README.md in ${distRepo}
-  [ ] did a feature change? -> update docs/index.html there (ztidal.github.io/ZtidalCode-dist)
-      a plain version bump needs neither: version, download link and size come from the releases API
+  [ ] did usage or a feature change? -> hand it to the Mac-side maintainer, who owns the
+      dist README and the landing page (see MAINTAINING.md in ${distRepo}).
+      This side ships releases; it does not edit those docs.
+      A plain version bump needs nothing: version, download link and size come from the releases API
   [ ] git push origin hardening   (the "build: ${version}" commit is local until pushed)
   [ ] the dist repository is separate — publishing assets there pushes nothing here`);
 }
