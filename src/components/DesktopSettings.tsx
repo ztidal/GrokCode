@@ -2,6 +2,37 @@ import { useState } from "react";
 import { openNewWindow } from "../api";
 import { ThemeToggle } from "./ThemeToggle";
 
+type DesktopSettingsOpenSetter = (open: boolean) => void;
+type DesktopSettingsFocusTarget = Pick<HTMLElement, "focus">;
+type DesktopSettingsFocusScheduler = (restoreFocus: () => void) => void;
+
+const scheduleSettingsFocus: DesktopSettingsFocusScheduler = (restoreFocus) =>
+  queueMicrotask(restoreFocus);
+
+/** Close Settings before restoring focus after the current pointer/key event. */
+export function closeDesktopSettings(
+  setOpen: DesktopSettingsOpenSetter,
+  getTrigger: () => DesktopSettingsFocusTarget | null,
+  scheduleFocus: DesktopSettingsFocusScheduler = scheduleSettingsFocus,
+) {
+  setOpen(false);
+  scheduleFocus(() => getTrigger()?.focus());
+}
+
+/** The shared gear toggle keeps opening and closing focus behavior symmetric. */
+export function toggleDesktopSettings(
+  open: boolean,
+  setOpen: DesktopSettingsOpenSetter,
+  getTrigger: () => DesktopSettingsFocusTarget | null,
+  scheduleFocus?: DesktopSettingsFocusScheduler,
+) {
+  if (open) {
+    closeDesktopSettings(setOpen, getTrigger, scheduleFocus);
+    return;
+  }
+  setOpen(true);
+}
+
 /** One icon implementation for every desktop Settings entry point. */
 export function SettingsGearIcon() {
   return (

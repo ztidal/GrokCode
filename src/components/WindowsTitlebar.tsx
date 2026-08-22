@@ -1,5 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import logoMark from "../assets/logo.png";
 import type { UpdateCheckStatus } from "../hooks/useAppUpdate";
 import { useAppVersion } from "../hooks/useAppVersion";
@@ -10,8 +10,10 @@ import {
   type WindowCommand,
 } from "../utils/windowsTitlebar";
 import {
+  closeDesktopSettings,
   DesktopSettingsPanel,
   SettingsGearIcon,
+  toggleDesktopSettings,
 } from "./DesktopSettings";
 
 /** Windows-only custom chrome so Settings sits in the title bar, not below it. */
@@ -30,19 +32,26 @@ export function WindowsTitlebar({
   const settingsPanelId = useId();
   const windowsDesktop = isWindowsDesktop();
   const version = useAppVersion(windowsDesktop);
+  const closeSettingsAndRestoreFocus = useCallback(
+    () =>
+      closeDesktopSettings(
+        setSettingsOpen,
+        () => settingsTriggerRef.current,
+      ),
+    [],
+  );
 
   useEffect(() => {
     if (!settingsOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       if (!settingsRef.current?.contains(event.target as Node)) {
-        setSettingsOpen(false);
+        closeSettingsAndRestoreFocus();
       }
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        setSettingsOpen(false);
-        settingsTriggerRef.current?.focus();
+        closeSettingsAndRestoreFocus();
       }
     };
     document.addEventListener("pointerdown", onPointerDown);
@@ -51,16 +60,12 @@ export function WindowsTitlebar({
       document.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [settingsOpen]);
+  }, [closeSettingsAndRestoreFocus, settingsOpen]);
 
   if (!windowsDesktop) return null;
 
   const busy = checkStatus === "checking";
   const status = windowsUpdateStatusLabel(checkStatus);
-  const closeSettingsAndRestoreFocus = () => {
-    setSettingsOpen(false);
-    settingsTriggerRef.current?.focus();
-  };
   const invokeWindowCommand = (
     command: WindowCommand,
     invoke: () => Promise<void>,
@@ -97,7 +102,13 @@ export function WindowsTitlebar({
           aria-expanded={settingsOpen}
           aria-haspopup="dialog"
           aria-controls={settingsOpen ? settingsPanelId : undefined}
-          onClick={() => setSettingsOpen((open) => !open)}
+          onClick={() =>
+            toggleDesktopSettings(
+              settingsOpen,
+              setSettingsOpen,
+              () => settingsTriggerRef.current,
+            )
+          }
         >
           <SettingsGearIcon />
         </button>

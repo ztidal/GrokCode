@@ -1,11 +1,13 @@
 import logoMark from "../assets/logo.png";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { UpdateCheckStatus } from "../hooks/useAppUpdate";
 import { useAppVersion } from "../hooks/useAppVersion";
 import { isMacosDesktop } from "../utils/platform";
 import {
+  closeDesktopSettings,
   DesktopSettingsPanel,
   SettingsGearIcon,
+  toggleDesktopSettings,
 } from "./DesktopSettings";
 
 const STATUS_LINE: Partial<Record<UpdateCheckStatus, string>> = {
@@ -80,6 +82,14 @@ export function MacosTitlebarBrand({
   const settingsPanelId = useId();
   const macDesktop = isMacosDesktop();
   const version = useAppVersion(macDesktop);
+  const closeSettingsAndRestoreFocus = useCallback(
+    () =>
+      closeDesktopSettings(
+        setSettingsOpen,
+        () => settingsTriggerRef.current,
+      ),
+    [],
+  );
 
   useEffect(() => {
     if (!macDesktop) return;
@@ -91,34 +101,29 @@ export function MacosTitlebarBrand({
       }
       if (event.key === "Escape" && settingsOpen) {
         event.preventDefault();
-        setSettingsOpen(false);
-        settingsTriggerRef.current?.focus();
+        closeSettingsAndRestoreFocus();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [macDesktop, settingsOpen]);
+  }, [closeSettingsAndRestoreFocus, macDesktop, settingsOpen]);
 
   useEffect(() => {
     if (!settingsOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       if (!settingsRef.current?.contains(event.target as Node)) {
-        setSettingsOpen(false);
+        closeSettingsAndRestoreFocus();
       }
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [settingsOpen]);
+  }, [closeSettingsAndRestoreFocus, settingsOpen]);
 
   if (!macDesktop) return null;
 
   const statusLine =
     STATUS_LINE[checkStatus] ?? (version ? `v${version}` : null);
   const busy = checkStatus === "checking";
-  const closeSettingsAndRestoreFocus = () => {
-    setSettingsOpen(false);
-    settingsTriggerRef.current?.focus();
-  };
 
   return (
     <div
@@ -172,7 +177,13 @@ export function MacosTitlebarBrand({
             aria-expanded={settingsOpen}
             aria-haspopup="dialog"
             aria-controls={settingsOpen ? settingsPanelId : undefined}
-            onClick={() => setSettingsOpen((open) => !open)}
+            onClick={() =>
+              toggleDesktopSettings(
+                settingsOpen,
+                setSettingsOpen,
+                () => settingsTriggerRef.current,
+              )
+            }
           >
             <SettingsGearIcon />
           </button>

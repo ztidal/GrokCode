@@ -181,6 +181,10 @@ html.platform-macos-desktop .side-panel.workspace-panel {
 /* overlays.css narrows the left rail to 168px at the app's 1100px minimum
  * width. Open the 208px panel into the workspace instead of off-screen. */
 @media (max-width: 1200px) {
+  html.platform-macos-desktop .left-rail {
+    z-index: 7;
+  }
+
   .macos-settings-panel {
     right: auto;
     left: 0;
