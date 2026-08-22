@@ -52,7 +52,8 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "icons:regen": "node scripts/generate-icons.mjs",
-    "updater:json": "node scripts/make-updater-json.mjs"
+    "updater:json": "node scripts/make-updater-json.mjs",
+    "release": "node scripts/release.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

@@ -28,6 +28,7 @@
  *   --notes-file <path> read the notes from a file instead
  *   --tag <tag>         release tag the assets live under        (default `v<version>`)
  *   --bundle-dir <dir>  where the bundles are                    (default src-tauri/target/release/bundle)
+ *   --exe <path>        the built binary the provenance check reads  (default <bundle-dir>/../<name>.exe)
  *   --out <path>        output file                              (default latest.json)
  *   --pub-date <iso>    publication date                         (default now)
  */
@@ -137,7 +138,7 @@ if (!binaryName) die("neither branding/ztidalcode.json nor src-tauri/tauri.conf.
 
 // Both installers wrap this one file, and both compress it, so the binary itself is the only
 // place the pubkey string is findable. It sits beside the bundle directory the build produced.
-const binary = join(bundleDir, "..", `${binaryName}.exe`);
+const binary = arg("exe", join(bundleDir, "..", `${binaryName}.exe`));
 if (!existsSync(binary)) {
   die(`${binary} is missing — build it: npm run tauri -- build --config branding/ztidalcode.json`);
 }
@@ -205,8 +206,10 @@ for (const { keys, subdir, ext } of installers) {
   // The landing page tells people to check their download against this file,
   // so it has to exist on every release. It was written by hand until a
   // release went out without one, which is the only way that ever ends.
+  // Names are flat because release assets are flat: sha256sum -c has to
+  // work in the folder the download landed in.
   checksums.push(
-    `${createHash("sha256").update(bytes).digest("hex")} *${subdir}/${basename(path)}`,
+    `${createHash("sha256").update(bytes).digest("hex")} *${basename(path)}`,
   );
   for (const key of keys) {
     platforms[key] = { signature, url: `${downloadBase}/${basename(path)}` };
