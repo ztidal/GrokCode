@@ -2,7 +2,7 @@
 
 A fork of [`3xian/PinkCode`](https://github.com/3xian/PinkCode) — a Tauri 2 + React desktop GUI for xAI's
 Grok Build coding agent, driven over ACP (`grok agent stdio`) — hardened and repackaged for internal team
-use on macOS and Windows. `origin` is the private `ztidal/ZtidalCode`; `upstream` is the original repository.
+use on Windows. `origin` is the private `ztidal/ZtidalCode`; `upstream` is the original repository.
 
 Read `CONTEXT.md` for vocabulary and `docs/adr/` before changing anything about permissions, the fork's
 relationship to upstream, or naming. Several things that look like oversights are decisions.
@@ -23,10 +23,8 @@ export TAURI_SIGNING_PRIVATE_KEY="$(cat /path/to/ztidalcode.key)"   # contents �
 npm run tauri -- build --config branding/ztidalcode.json
 ```
 
-The Windows PC uses `npm run release -- --no-commit ... --draft` to build and verify Windows artifacts from
-the exact release commit and stage them in a GitHub draft; the helper never publishes it. The Mac release
-owner builds Apple Silicon from the same SHA, combines both platforms into one five-key `latest.json`, and
-publishes the completed draft. See `branding/README.md`; neither side may publish a one-platform manifest.
+Releases go through `npm run release -- --help`: it builds from a clean detached worktree and
+refuses, by design, each mistake that has already shipped once by hand.
 
 See `branding/README.md`. Without a signing key, add
 `--config '{"bundle":{"createUpdaterArtifacts":false}}'` to skip update artifacts — the result installs but
