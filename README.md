@@ -224,6 +224,16 @@ intercepts reverse RPCs (`session/request_permission`, `fs/write_text_file`, `x.
 Read [`CONTEXT.md`](CONTEXT.md) for the vocabulary this codebase uses — several terms (Seed,
 Escalation) carry distinctions the hardening depends on.
 
+## Acknowledgements
+
+Everything that makes this a workspace rather than a terminal — the task rail, the timeline, the
+Files and Git panels, the ACP client that drives `grok` — is **[PinkCode](https://github.com/3xian/PinkCode)**,
+by [3xian](https://github.com/3xian). This fork adds a team's hardening on top and keeps its
+relationship to upstream deliberately thin (see *What differs from upstream*), so that PinkCode's
+improvements keep flowing in with a plain `git merge`.
+
+If this fork is useful, the first thanks belongs upstream.
+
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE).
