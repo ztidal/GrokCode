@@ -6,7 +6,7 @@
  *
  * Usage:
  *   npm run release -- --notes "what changed"           # build + verified feed, then stop
- *   npm run release -- --notes-file NOTES.md --draft     # Windows handoff; never publishes
+ *   npm run release -- --notes-file NOTES.md --publish
  *   npm run release -- --dry-run --notes "what changed" # preflight + plan, no writes at all
  *
  * `--help` lists every flag. If the build fails after the version commit, rerun with --no-commit —
@@ -37,8 +37,8 @@ function arg(name, fallback = null) {
   const i = process.argv.indexOf(`--${name}`);
   if (i === -1) return fallback;
   const value = process.argv[i + 1];
-  // A flag is never a value: "--notes --draft" must refuse, not stage a
-  // release whose changelog is the string "--draft".
+  // A flag is never a value: "--notes --publish" must refuse, not publish a
+  // release whose changelog is the string "--publish".
   if (value === undefined || value.startsWith("--")) {
     die(`--${name} needs a value, got ${value ?? "nothing"}`);
   }
@@ -74,8 +74,7 @@ const usage = `usage: npm run release -- [options]
 Cuts a ZtidalCode release from the hardening branch: bumps branding/ztidalcode.json (one commit,
 "build: X.Y.Z" — the only git write this script makes), builds in a detached release worktree so
 the bundles can only contain what is committed, generates and verifies the update feed
-(latest.json + SHA256SUMS.txt in the repo root), and on request installs or stages its Windows
-artifacts in a GitHub draft. The Mac-side release owner completes and publishes that draft.
+(latest.json + SHA256SUMS.txt in the repo root), and on request installs and publishes it.
 
 options
   --notes <text>       release notes (this or --notes-file is required); they become
@@ -86,12 +85,12 @@ options
   --key <path>         minisign private key file (see key sources below)
   --install            after verifying: run the NSIS setup with /P /R and confirm the
                        installed exe reports the new version
-  --draft              after verifying: create/update draft v<X.Y.Z> on ${distRepo}
-                       with the Windows feed, checksums, installers and signatures; never publish
+  --publish            after verifying: gh release create v<X.Y.Z> on ${distRepo}
+                       with the feed, checksums, both installers and both signatures
   --dry-run            preflight and plan only — writes nothing, commits nothing
   --help               this text
 
-With neither --install nor --draft the run stops after the verified artifacts and prints
+With neither --install nor --publish the run stops after the verified artifacts and prints
 exactly what those flags would do.
 
 signing key — first source that answers wins; the contents are read in-process and exported only
@@ -110,7 +109,7 @@ if (has("help")) {
 
 // A typo like --dryrun must not fall through to a real release.
 const valueFlags = ["notes", "notes-file", "version", "key"];
-const booleanFlags = ["no-commit", "install", "draft", "dry-run", "help"];
+const booleanFlags = ["no-commit", "install", "publish", "dry-run", "help"];
 for (let i = 2; i < process.argv.length; i++) {
   const token = process.argv[i];
   if (!token.startsWith("--")) die(`unexpected argument ${token} (see --help)`);
@@ -126,7 +125,7 @@ for (let i = 2; i < process.argv.length; i++) {
 const dryRun = has("dry-run");
 const noCommit = has("no-commit");
 const doInstall = has("install");
-const doDraft = has("draft");
+const doPublish = has("publish");
 
 // --- preflight: every refusal here is a release incident that already happened once -----------
 
@@ -163,8 +162,8 @@ if (process.env.TAURI_SIGNING_PRIVATE_KEY) {
   keyLabel = `contents of ${keyFile}, read at build time`;
 }
 
-if (doDraft && spawnSync("gh", ["--version"], { stdio: "ignore" }).status !== 0) {
-  die("--draft needs the gh CLI on PATH");
+if (doPublish && spawnSync("gh", ["--version"], { stdio: "ignore" }).status !== 0) {
+  die("--publish needs the gh CLI on PATH");
 }
 if (doInstall && !process.env.LOCALAPPDATA) die("--install needs LOCALAPPDATA to find the installed exe");
 
@@ -246,7 +245,7 @@ console.log(`             with CARGO_TARGET_DIR=${targetDir}`);
 console.log(`  stale      ${stale.length ? `delete ${stale.map((f) => basename(f)).join(", ")}` : "nothing to delete"}`);
 console.log(`  feed       node ${feedArgs.join(" ")}`);
 console.log(`  install    ${doInstall ? `run the NSIS setup /P /R, then confirm ${installedExe} reports ${version}` : "not requested"}`);
-console.log(`  draft      ${doDraft ? `stage Windows assets in draft v${version} on ${distRepo}` : "not requested"}`);
+console.log(`  publish    ${doPublish ? `gh release create v${version} on ${distRepo}` : "not requested"}`);
 
 function printChecklist() {
   console.log(`
@@ -384,9 +383,9 @@ const assets = [
   `${msi}.sig`,
 ];
 
-// --- install / Windows draft handoff ----------------------------------------------------------
+// --- install / publish ------------------------------------------------------------------------
 
-const draftArgs = [
+const publishArgs = [
   "release",
   "create",
   `v${version}`,
@@ -416,10 +415,12 @@ if (doInstall) {
   console.log(`installed and verified: ${installedExe} reports ${installed}`);
 }
 
-if (doDraft) {
-  // The Windows builder never flips the release live. macOS bundles and the
-  // complete cross-platform feed do not exist on this machine; publishing
-  // here would make every Mac client see an incomplete latest.json.
+if (doPublish) {
+  // Draft first, flipped live only once every asset is up: a release born
+  // public is "latest" while its assets are still uploading, and a client
+  // polling latest.json in that window downloads a 404. A draft under this
+  // tag is a previous publish that died mid-upload — replaced; a published
+  // one is a refusal, not a retry.
   const view = spawnSync(
     "gh",
     ["release", "view", `v${version}`, "--repo", distRepo, "--json", "isDraft"],
@@ -429,32 +430,22 @@ if (doDraft) {
     if (!JSON.parse(view.stdout.trim()).isDraft) {
       die(`v${version} is already published on ${distRepo}`);
     }
-    console.log(`v${version} already exists as a draft; updating only the Windows-owned assets`);
-    run("gh", ["release", "upload", `v${version}`, "--repo", distRepo, "--clobber", ...assets]);
-    run("gh", [
-      "release",
-      "edit",
-      `v${version}`,
-      "--repo",
-      distRepo,
-      "--title",
-      `${productName} ${version}`,
-      ...(notesFile ? ["--notes-file", notesFile] : ["--notes", notesText]),
-    ]);
-  } else {
-    run("gh", draftArgs);
+    console.log(`v${version} exists as a draft from an interrupted publish; replacing it`);
+    run("gh", ["release", "delete", `v${version}`, "--repo", distRepo, "--yes"]);
   }
-  console.log(`staged Windows assets in draft v${version}; the Mac-side release owner will finalize it`);
+  run("gh", publishArgs);
+  run("gh", ["release", "edit", `v${version}`, "--repo", distRepo, "--draft=false"]);
+  console.log(`published v${version} to ${distRepo}`);
 }
 
-if (!doInstall && !doDraft) {
-  console.log(`\nartifacts verified; stopping here (no --install / --draft).`);
+if (!doInstall && !doPublish) {
+  console.log(`\nartifacts verified; stopping here (no --install / --publish).`);
   console.log(`--install would run:`);
   console.log(`  ${nsis} /P /R`);
   console.log(`  then confirm ${installedExe} reports ${version}`);
-  console.log(`--draft would run:`);
-  console.log(`  gh ${draftArgs.join(" ")}`);
-  console.log(`  and leave v${version} as a draft for the Mac-side release owner`);
+  console.log(`--publish would run:`);
+  console.log(`  gh ${publishArgs.join(" ")}`);
+  console.log(`  gh release edit v${version} --repo ${distRepo} --draft=false`);
 }
 
 printChecklist();
