@@ -108,6 +108,24 @@ refuses to write one it cannot verify. A feed whose signature came from a differ
 it points at looks perfectly healthy from the outside and fails on every client at install time; it is the
 one packaging mistake worth spending a check on.
 
+### The macOS half
+
+macOS is built on a Mac, by the macOS side, from the source tag the Windows release created —
+never from a branch head, because the feed claims a version and the build must be that version.
+It applies a second overlay after the first so its updater reads a feed of its own:
+
+```bash
+npm run tauri -- build --config branding/ztidalcode.json --config branding/ztidalcode-mac.json \
+  --target universal-apple-darwin
+node scripts/make-updater-json.mjs --platform macos --arch universal --notes-file NOTES.md \
+  --bundle-dir src-tauri/target/universal-apple-darwin/release/bundle
+```
+
+That writes `latest-mac.json` and `SHA256SUMS-mac.txt`, which the macOS side uploads to the
+existing release alongside its archive, `.sig` and DMG. Two feed files, not one merged feed: two
+machines publishing into one release must never write the same file. The full procedure and the
+rules live in `MAINTAINING.md` in the dist repository.
+
 ### One platform key per installer kind
 
 The feed carries `windows-x86_64-nsis`, `windows-x86_64-msi` and a generic `windows-x86_64`. This is not

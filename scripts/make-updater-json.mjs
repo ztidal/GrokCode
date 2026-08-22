@@ -19,11 +19,23 @@
  * upstream's feed — it installs, runs and looks healthy, and then every client that installs it
  * walks itself onto upstream's next release. So the binary is checked for our pubkey first.
  *
+ * Two platforms, two feed files. Windows writes `latest.json`; macOS writes `latest-mac.json`,
+ * and the macOS build points its updater at that name through `branding/ztidalcode-mac.json`.
+ * Two machines publishing into one release must never write the same file — a merged feed
+ * would be owned by whichever side uploaded last, and a bad merge stops every client updating.
+ *
  * Usage:
  *   node scripts/make-updater-json.mjs --notes "what changed in this release"
  *   node scripts/make-updater-json.mjs --notes-file NOTES.md --tag v0.0.8 --out latest.json
+ *   node scripts/make-updater-json.mjs --platform macos --arch universal --notes-file NOTES.md \
+ *        --bundle-dir src-tauri/target/universal-apple-darwin/release/bundle
  *
  * Options:
+ *   --platform <name>   windows (default) or macos — selects the bundles, the feed keys, the
+ *                       output names (`latest-mac.json`, `SHA256SUMS-mac.txt`) and the binary
+ *                       the provenance check reads
+ *   --arch <arch>       macos only, required: aarch64 | x86_64 | universal. The archive is
+ *                       named the same whatever it was built for, so this cannot be inferred
  *   --notes <text>      release notes; shown in the UpdateModal  (required unless --notes-file)
  *   --notes-file <path> read the notes from a file instead
  *   --tag <tag>         release tag the assets live under        (default `v<version>`)
@@ -129,18 +141,32 @@ function verifyBundle(bytes, signatureB64, expectedName) {
 
 const bundleDir = arg("bundle-dir", join(repoRoot, "src-tauri", "target", "release", "bundle"));
 
+const platform = arg("platform", "windows");
+if (!["windows", "macos"].includes(platform)) die(`--platform must be windows or macos, not ${platform}`);
+const macArch = arg("arch", null);
+if (platform === "macos" && !["aarch64", "x86_64", "universal"].includes(macArch ?? "")) {
+  die("--platform macos needs --arch aarch64 | x86_64 | universal; the bundle's name does not say");
+}
+
 const baseConf = JSON.parse(readFileSync(join(repoRoot, "src-tauri", "tauri.conf.json"), "utf8"));
 // Tauri names the executable after `mainBinaryName` and only falls back to `productName`; the
 // overlay is merged over the base config, so either file can be the one that supplies either key.
 const binaryName =
   branding.mainBinaryName ?? baseConf.mainBinaryName ?? branding.productName ?? baseConf.productName;
 if (!binaryName) die("neither branding/ztidalcode.json nor src-tauri/tauri.conf.json names the binary");
+const productName = branding.productName ?? baseConf.productName ?? binaryName;
 
-// Both installers wrap this one file, and both compress it, so the binary itself is the only
-// place the pubkey string is findable. It sits beside the bundle directory the build produced.
-const binary = arg("exe", join(bundleDir, "..", `${binaryName}.exe`));
+// Every bundle wraps this one file, and every bundle compresses it, so the binary itself is the
+// only place the pubkey string is findable. On Windows it sits beside the bundle directory; on
+// macOS the bundler leaves the unpacked .app beside the archive it made from it.
+const binary = arg(
+  "exe",
+  platform === "macos"
+    ? join(bundleDir, "macos", `${productName}.app`, "Contents", "MacOS", binaryName)
+    : join(bundleDir, "..", `${binaryName}.exe`),
+);
 if (!existsSync(binary)) {
-  die(`${binary} is missing — build it: npm run tauri -- build --config branding/ztidalcode.json`);
+  die(`${binary} is missing — build through the overlay first (branding/README.md)`);
 }
 const binaryBytes = readFileSync(binary);
 const carries = (key) => binaryBytes.includes(Buffer.from(key, "utf8"));
@@ -178,10 +204,16 @@ function findBundle(subdir, ext) {
 
 // `windows-x86_64` is the fallback the updater reaches for when it cannot tell how the client was
 // installed; NSIS is the installer we hand to everyone else, so it is the safe default there.
-const installers = [
+const windowsInstallers = [
   { keys: ["windows-x86_64-nsis", "windows-x86_64"], subdir: "nsis", ext: "-setup.exe" },
   { keys: ["windows-x86_64-msi"], subdir: "msi", ext: ".msi" },
 ];
+// The updater looks up the running machine's arch; there is no "universal" key. A universal
+// build therefore answers to both, under one archive.
+const macKeys =
+  macArch === "universal" ? ["darwin-aarch64", "darwin-x86_64"] : [`darwin-${macArch}`];
+const installers =
+  platform === "macos" ? [{ keys: macKeys, subdir: "macos", ext: ".app.tar.gz" }] : windowsInstallers;
 
 const platforms = {};
 const checksums = [];
@@ -219,10 +251,20 @@ for (const { keys, subdir, ext } of installers) {
 // --- emit -------------------------------------------------------------------------------------
 
 const pubDate = arg("pub-date", new Date().toISOString().replace(/\.\d{3}Z$/, "Z"));
-const out = arg("out", join(process.cwd(), "latest.json"));
+// The DMG is the first-install download, not an update artifact: listed in the checksums the
+// landing page points people at, never in the feed.
+if (platform === "macos" && existsSync(join(bundleDir, "dmg"))) {
+  for (const name of readdirSync(join(bundleDir, "dmg")).filter((n) => n.endsWith(".dmg"))) {
+    const bytes = readFileSync(join(bundleDir, "dmg", name));
+    checksums.push(`${createHash("sha256").update(bytes).digest("hex")} *${name}`);
+  }
+}
+
+const feedName = platform === "macos" ? "latest-mac.json" : "latest.json";
+const out = arg("out", join(process.cwd(), feedName));
 writeFileSync(out, `${JSON.stringify({ version, notes, pub_date: pubDate, platforms }, null, 2)}\n`);
 
-const sumsPath = join(dirname(out), "SHA256SUMS.txt");
+const sumsPath = join(dirname(out), platform === "macos" ? "SHA256SUMS-mac.txt" : "SHA256SUMS.txt");
 writeFileSync(sumsPath, `${checksums.join(String.fromCharCode(10))}${String.fromCharCode(10)}`);
 
 console.log(`\nwrote ${out}`);

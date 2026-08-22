@@ -250,11 +250,13 @@ console.log(`  publish    ${doPublish ? `gh release create v${version} on ${dist
 function printChecklist() {
   console.log(`
 release checklist (branding/README.md — both halves of the dist repo go stale silently):
-  [ ] did usage or a feature change? -> hand it to the Mac-side maintainer, who owns the
-      dist README and the landing page (see MAINTAINING.md in ${distRepo}).
-      This side ships releases; it does not edit those docs.
-      A plain version bump needs nothing: version, download link and size come from the releases API
-  [ ] git push origin hardening   (the "build: ${version}" commit is local until pushed)
+  [ ] did usage change?    -> update README.md in ${distRepo}
+  [ ] did a feature change? -> update docs/index.html there (ztidal.github.io/ZtidalCode-dist)
+      a plain version bump needs neither: version, download link and size come from the releases API
+  [ ] git push origin hardening --follow-tags   (the "build: ${version}" commit and the v${version}
+      tag are local until pushed — the macOS side builds from that tag)
+  [ ] tell the macOS side v${version} is published: they build the tag and upload their
+      artifacts plus latest-mac.json to it (MAINTAINING.md in ${distRepo})
   [ ] the dist repository is separate — publishing assets there pushes nothing here`);
 }
 
@@ -276,6 +278,13 @@ if (!noCommit) {
   // Pathspec form: only this file lands, whatever a concurrent session staged.
   git(["commit", "-m", `build: ${version}`, "--", "branding/ztidalcode.json"]);
   console.log(`\ncommitted "build: ${version}"`);
+}
+
+// The source tag is what the macOS side builds: the release must be the same source on both
+// platforms, and "the commit whose branding says X.Y.Z" is not something a checkout can ask for.
+if (git(["tag", "--list", `v${version}`]) === "") {
+  git(["tag", "-a", `v${version}`, "-m", `${productName} ${version}`]);
+  console.log(`tagged v${version}`);
 }
 
 const releaseSha = git(["rev-parse", "HEAD"]);

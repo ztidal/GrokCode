@@ -1,0 +1,10 @@
+{
+  "$schema": "../src-tauri/gen/schemas/desktop-schema.json",
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/ztidal/ZtidalCode-dist/releases/latest/download/latest-mac.json"
+      ]
+    }
+  }
+}
