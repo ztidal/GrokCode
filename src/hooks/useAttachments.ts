@@ -92,7 +92,14 @@ export function pointInRect(
 
 export function physicalPointInElement(
   position: { x: number; y: number },
-  element: Pick<Element, "getBoundingClientRect"> | null,
+  element: {
+    getBoundingClientRect: () => {
+      left: number;
+      top: number;
+      right: number;
+      bottom: number;
+    };
+  } | null,
   devicePixelRatio = 1,
 ): boolean {
   if (!element) return false;
