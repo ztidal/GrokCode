@@ -3,7 +3,7 @@
   "productName": "ZtidalCode",
   "mainBinaryName": "ZtidalCode",
   "identifier": "com.ztidal.code",
-  "version": "0.0.37",
+  "version": "0.0.38",
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJCNzMzODgwMDA4NUNCRjYKUldUMnk0VUFnRGh6dXlYWEM4ODF4aVMrdmo0SS9RbU5HY3dTdnF0cDRKdUs4MEx1bUdtY3JRdEsK",
