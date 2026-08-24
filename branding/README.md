@@ -6,8 +6,10 @@
 npm run tauri -- build --config branding/ztidalcode.json
 ```
 
-Everything that distinguishes our build from upstream's — product name, bundle identifier, and the
-updater's trust anchor and feed — lives here rather than in `src-tauri/tauri.conf.json`.
+Everything that distinguishes our build from upstream's — product name, the shipped executable
+(`ZtidalCode.exe` / the Mac binary), bundle identifier, and the updater's trust anchor and feed —
+lives here rather than in `src-tauri/tauri.conf.json`. `mainBinaryName` must stay in lockstep with
+the `[[bin]]` name in `src-tauri/Cargo.toml`; Tauri will not find the binary if they disagree.
 
 ## Why an overlay instead of editing the config
 

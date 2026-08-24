@@ -1,6 +1,7 @@
 {
   "$schema": "../src-tauri/gen/schemas/desktop-schema.json",
   "productName": "ZtidalCode",
+  "mainBinaryName": "ZtidalCode",
   "identifier": "com.ztidal.code",
   "version": "0.0.37",
   "plugins": {

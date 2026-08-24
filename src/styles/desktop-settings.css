@@ -138,3 +138,75 @@
   color: var(--text);
   box-shadow: var(--shadow-sm);
 }
+
+.pet-settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 4px;
+}
+
+.pet-settings-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 9px 6px;
+}
+
+.pet-settings-pick-label,
+.pet-settings-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.pet-settings-hint {
+  margin: 0;
+  padding: 0 9px 6px;
+  line-height: 1.35;
+}
+
+.pet-settings-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-hover);
+}
+
+.pet-settings-option {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pet-settings-option:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.pet-settings-option[aria-checked="true"] {
+  background: var(--bg-menu);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.pet-settings-option:disabled {
+  cursor: default;
+  opacity: 0.68;
+}
+
+.pet-settings-option:focus-visible {
+  outline: 2px solid var(--live);
+  outline-offset: -2px;
+}

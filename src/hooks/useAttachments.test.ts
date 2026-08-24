@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   baseName,
   composePrompt,
+  mergeAttachmentPaths,
   pasteCarriesFiles,
+  physicalPointInElement,
+  pointInRect,
   quotePath,
   type Attachment,
 } from "./useAttachments";
@@ -101,5 +104,33 @@ describe("pasteCarriesFiles", () => {
 
   it("says no when there is no clipboard data at all", () => {
     expect(pasteCarriesFiles(null)).toBe(false);
+  });
+});
+
+describe("mergeAttachmentPaths", () => {
+  it("keeps first-seen order and skips blanks and duplicates", () => {
+    expect(
+      mergeAttachmentPaths(
+        ["D:\\a.rs"],
+        ["D:\\a.rs", "  ", "D:\\b.rs", "D:\\b.rs"],
+      ),
+    ).toEqual(["D:\\b.rs"]);
+  });
+});
+
+describe("physicalPointInElement", () => {
+  const box = { left: 10, top: 20, right: 110, bottom: 80 };
+
+  it("tests in CSS pixels", () => {
+    expect(pointInRect(10, 20, box)).toBe(true);
+    expect(pointInRect(110, 80, box)).toBe(true);
+    expect(pointInRect(9, 50, box)).toBe(false);
+  });
+
+  it("converts a physical drop coordinate by devicePixelRatio", () => {
+    const element = { getBoundingClientRect: () => box };
+    expect(physicalPointInElement({ x: 40, y: 80 }, element, 2)).toBe(true);
+    expect(physicalPointInElement({ x: 8, y: 80 }, element, 2)).toBe(false);
+    expect(physicalPointInElement({ x: 40, y: 80 }, null, 2)).toBe(false);
   });
 });

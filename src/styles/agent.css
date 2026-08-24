@@ -838,6 +838,14 @@ button.user-question-option:hover:not(:disabled),
     var(--inset-spec);
 }
 
+.prompt-composer.is-drop-target {
+  border-color: var(--live);
+  box-shadow:
+    0 0 0 1px var(--live),
+    0 8px 24px rgb(var(--text-rgb) / 0.16),
+    var(--inset-spec);
+}
+
 .prompt-input {
   width: 100%;
   resize: vertical;

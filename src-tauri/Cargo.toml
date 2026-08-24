@@ -10,9 +10,10 @@ edition = "2021"
 name = "pinkcode_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-# Dock / process name when running outside a .app (e.g. `tauri dev`)
+# Process / exe name (`ZtidalCode.exe`). Must match branding/ztidalcode.json
+# `mainBinaryName`. The crate stays `pinkcode` (ADR-0003).
 [[bin]]
-name = "PinkCode"
+name = "ZtidalCode"
 path = "src/main.rs"
 
 [build-dependencies]

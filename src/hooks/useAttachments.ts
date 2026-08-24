@@ -62,6 +62,45 @@ export function pasteCarriesFiles(data: DataTransfer | null): boolean {
   return Array.from(data.types ?? []).includes("Files");
 }
 
+/**
+ * Paths to add that are not already in the list, in the order they arrived.
+ * Explorer can drop the same file twice; the chip is unique per path.
+ */
+export function mergeAttachmentPaths(
+  existing: readonly string[],
+  incoming: readonly string[],
+): string[] {
+  const seen = new Set(existing);
+  const extra: string[] = [];
+  for (const raw of incoming) {
+    const path = raw.trim();
+    if (!path || seen.has(path)) continue;
+    seen.add(path);
+    extra.push(path);
+  }
+  return extra;
+}
+
+/** CSS-pixel hit test. Tauri drop coordinates are physical; divide by DPR. */
+export function pointInRect(
+  x: number,
+  y: number,
+  rect: { left: number; top: number; right: number; bottom: number },
+): boolean {
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+export function physicalPointInElement(
+  position: { x: number; y: number },
+  element: Pick<Element, "getBoundingClientRect"> | null,
+  devicePixelRatio = 1,
+): boolean {
+  if (!element) return false;
+  const scale = devicePixelRatio > 0 ? devicePixelRatio : 1;
+  const rect = element.getBoundingClientRect();
+  return pointInRect(position.x / scale, position.y / scale, rect);
+}
+
 /** Base64 without a per-byte concat, which chokes on a full screenshot. */
 function toBase64(bytes: Uint8Array): string {
   const CHUNK = 0x8000;
@@ -79,6 +118,8 @@ export interface AttachmentsApi {
   items: Attachment[];
   /** Paste handler for the composer's textarea. */
   onPaste: (event: React.ClipboardEvent<HTMLTextAreaElement>) => void;
+  /** Absolute paths from an OS file drop (Explorer → composer). */
+  addPaths: (paths: readonly string[]) => void;
   remove: (id: string) => void;
   clear: () => void;
 }
@@ -104,6 +145,33 @@ export function useAttachments(): AttachmentsApi {
   }, []);
 
   const clear = useCallback(() => setItems([]), []);
+
+  const addPaths = useCallback((paths: readonly string[]) => {
+    void (async () => {
+      const unique = mergeAttachmentPaths([], paths);
+      if (unique.length === 0) return;
+      const added = await Promise.all(
+        unique.map(async (path) => ({
+          id: makeId(),
+          path,
+          name: baseName(path),
+          preview: await readImagePreview(path).catch(() => null),
+        })),
+      );
+      setItems((previous) => {
+        const extra = mergeAttachmentPaths(
+          previous.map((item) => item.path),
+          added.map((item) => item.path),
+        );
+        if (extra.length === 0) return previous;
+        const byPath = new Map(added.map((item) => [item.path, item]));
+        return [
+          ...previous,
+          ...extra.map((path) => byPath.get(path)!),
+        ];
+      });
+    })();
+  }, []);
 
   const onPaste = useCallback(
     (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -156,5 +224,5 @@ export function useAttachments(): AttachmentsApi {
     [],
   );
 
-  return { items, onPaste, remove, clear };
+  return { items, onPaste, addPaths, remove, clear };
 }

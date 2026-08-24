@@ -1,3 +1,4 @@
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AvailableCommand,
@@ -8,7 +9,11 @@ import type {
 } from "../types";
 import { PERMISSION_MODE_OPTIONS, SESSION_MODE_OPTIONS } from "../types";
 import { usePromptHistoryBrowse } from "../hooks/usePromptHistoryBrowse";
-import { composePrompt, useAttachments } from "../hooks/useAttachments";
+import {
+  composePrompt,
+  physicalPointInElement,
+  useAttachments,
+} from "../hooks/useAttachments";
 import { AttachmentChips } from "./AttachmentChips";
 import { filterSlashCommands } from "../utils/slashCommands";
 import {
@@ -77,9 +82,12 @@ export function PromptBar({
   const [text, setText] = useState("");
   const [menuIndex, setMenuIndex] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
 
   const attachments = useAttachments();
+  const addPaths = attachments.addPaths;
   const menuRef = useRef<HTMLDivElement>(null);
   /**
    * After insert / Esc, keep the menu closed until the user types again.
@@ -149,6 +157,48 @@ export function PromptBar({
     onHistoryExclusive,
     onSessionReset,
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    void getCurrentWebview()
+      .onDragDropEvent((event) => {
+        if (cancelled) return;
+        const payload = event.payload;
+        if (payload.type === "leave") {
+          setDropActive(false);
+          return;
+        }
+        const over = physicalPointInElement(
+          payload.position,
+          composerRef.current,
+          window.devicePixelRatio || 1,
+        );
+        if (payload.type === "enter" || payload.type === "over") {
+          setDropActive(over);
+          return;
+        }
+        if (payload.type === "drop") {
+          setDropActive(false);
+          // The event is window-wide; this composer is the only place a
+          // dropped path can go. Hit-testing the box is reserved for the
+          // highlight — Tauri's physical coordinates and the title-bar
+          // overlay disagree often enough that requiring a hit drops files.
+          if (payload.paths.length > 0) addPaths(payload.paths);
+        }
+      })
+      .then((dispose) => {
+        if (cancelled) dispose();
+        else unlisten = dispose;
+      })
+      .catch(() => {
+        /* vite preview / tests: no webview drop bus */
+      });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [addPaths]);
 
   const slashQuery = useMemo(() => parseSlashQuery(text), [text]);
 
@@ -227,7 +277,12 @@ export function PromptBar({
 
   return (
     <div className="prompt-bar">
-      <div className="prompt-composer">
+      <div
+        ref={composerRef}
+        className={
+          dropActive ? "prompt-composer is-drop-target" : "prompt-composer"
+        }
+      >
         {history.active && history.selected != null && (
           <HistoryMenu
             entries={history.entries}

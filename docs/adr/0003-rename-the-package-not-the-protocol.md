@@ -5,9 +5,12 @@ the wire to Grok Build is still upstream's: `acp/protocol.rs` sends `clientInfo.
 `gateway.rs` uses the `_pinkcode/` JSON-RPC method prefix. Those two are protocol values, not branding —
 renaming them changes what the agent sees, for no benefit to us.
 
-Product name, bundle identifier and the updater's trust anchor live in `branding/ztidalcode.json` and are
-merged at build time (`--config`), so `src-tauri/tauri.conf.json` — which upstream edited in 15 of its last
-30 commits — stays untouched. Only four source strings changed: the two title bars and two in `index.html`.
+Product name, the shipped binary name (`ZtidalCode.exe`), bundle identifier and the updater's trust
+anchor live in `branding/ztidalcode.json` and are merged at build time (`--config`), so
+`src-tauri/tauri.conf.json` — which upstream edited in 15 of its last 30 commits — stays untouched.
+The Cargo `[[bin]]` name has to match `mainBinaryName` or Tauri cannot find the executable; that one
+line in `Cargo.toml` is the exception. Only four source strings changed besides it: the two title
+bars and two in `index.html`.
 
 ## Consequences
 
