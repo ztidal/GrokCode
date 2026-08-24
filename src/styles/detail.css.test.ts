@@ -36,4 +36,13 @@ describe("timeline row styling", () => {
     expect(applied).not.toBeNull();
     expect(applied![1]).toBe("tl-item");
   });
+
+  it("right-aligns user rows only in the unfiltered All stream", () => {
+    // `.is-filtered` is the User/Agent/… views. A selector that omitted the
+    // `:not(.is-filtered)` would push the User scan-list to the right too.
+    const rule = css.match(
+      /\.stream-timeline:not\(\.is-filtered\)\s+\.tl-item\.kind-user\s*\{[^}]*align-items:\s*flex-end/,
+    );
+    expect(rule, "All-view user chat alignment missing").not.toBeNull();
+  });
 });

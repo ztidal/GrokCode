@@ -135,11 +135,17 @@ export function TimelineRowChrome({
   kind,
   ts,
   stackClass,
+  className,
+  itemId,
+  onActivate,
   children,
 }: {
   kind: string;
   ts?: number | null;
   stackClass: string;
+  className?: string;
+  itemId?: string;
+  onActivate?: () => void;
   children: ReactNode;
 }) {
   const showIcon = !isStackContinue(stackClass);
@@ -147,7 +153,41 @@ export function TimelineRowChrome({
   const hasMeta = showIcon || (Boolean(clock) && ts != null);
 
   return (
-    <div className={`tl-item kind-${kind} ${stackClass}`.trim()}>
+    <div
+      className={`tl-item kind-${kind} ${stackClass}${className ? ` ${className}` : ""}`.trim()}
+      data-timeline-id={itemId}
+      role={onActivate ? "button" : undefined}
+      tabIndex={onActivate ? 0 : undefined}
+      title={onActivate ? "Show this message in All" : undefined}
+      onClick={
+        onActivate
+          ? (event) => {
+              const target = event.target;
+              if (
+                target instanceof Element &&
+                target.closest("a, button, textarea, input, select")
+              ) {
+                return;
+              }
+              const sel = window.getSelection();
+              if (sel && !sel.isCollapsed && sel.toString().length > 0) {
+                return;
+              }
+              onActivate();
+            }
+          : undefined
+      }
+      onKeyDown={
+        onActivate
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onActivate();
+              }
+            }
+          : undefined
+      }
+    >
       {hasMeta && (
         <div className="tl-meta">
           {showIcon ? <KindIcon kind={kind} /> : null}

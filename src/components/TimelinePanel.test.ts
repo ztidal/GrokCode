@@ -1,6 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { isNearTimelineBottom, readStickIntent } from "./TimelinePanel";
+import {
+  isNearTimelineBottom,
+  offsetBeforeKey,
+  readStickIntent,
+  timelineItemSelector,
+} from "./TimelinePanel";
 import type { VirtualScrollMetrics } from "../hooks/useVirtualWindow";
+
+describe("offsetBeforeKey", () => {
+  const heightOf = (key: string) => (key === "tall" ? 40 : 10);
+
+  it("sums heights up to the key", () => {
+    expect(offsetBeforeKey(["a", "tall", "c"], "c", heightOf)).toBe(50);
+    expect(offsetBeforeKey(["a", "tall", "c"], "a", heightOf)).toBe(0);
+  });
+
+  it("is null when the key is not in the list", () => {
+    expect(offsetBeforeKey(["a", "b"], "missing", heightOf)).toBeNull();
+  });
+});
+
+describe("timelineItemSelector", () => {
+  it("quotes the id so `:` in event ids is still one attribute value", () => {
+    expect(timelineItemSelector("event-abc:def")).toBe(
+      '[data-timeline-id="event-abc:def"]',
+    );
+  });
+
+  it("escapes quotes and backslashes inside the attribute", () => {
+    expect(timelineItemSelector('a"b\\c')).toBe(
+      '[data-timeline-id="a\\"b\\\\c"]',
+    );
+  });
+});
 
 describe("isNearTimelineBottom", () => {
   /** 600px viewport over a 2000px stream; `dist` is how far the tail is below it. */

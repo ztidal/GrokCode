@@ -77,4 +77,11 @@ describe("timeline filter bar markup", () => {
     // `.timeline-filter-chip.active` is what paints the selected chip.
     expect(all!.classes).toContain("active");
   });
+
+  it("leaves All without `is-filtered`, which is what the user-chat CSS keys off", () => {
+    const html = renderPanel([item("a", "user"), item("b", "agent")]);
+    const stream = withClass(html, "stream-timeline")[0]!;
+    expect(stream.classes).not.toContain("is-filtered");
+    expect(withClass(html, "kind-user")).toHaveLength(1);
+  });
 });

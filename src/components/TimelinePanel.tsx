@@ -76,6 +76,29 @@ export function isAtTimelineBottom(m: VirtualScrollMetrics): boolean {
   return m.scrollHeight - m.scrollTop - m.clientHeight <= 2;
 }
 
+/** Distance from the list top to `key`, using measured or estimated row heights. */
+export function offsetBeforeKey(
+  keys: readonly string[],
+  key: string,
+  heightOf: (key: string) => number,
+): number | null {
+  let y = 0;
+  for (const itemKey of keys) {
+    if (itemKey === key) return y;
+    y += heightOf(itemKey);
+  }
+  return null;
+}
+
+/**
+ * `querySelector` for a row's `data-timeline-id`. Quoted so ids that contain
+ * `:` (event-… ids) stay one attribute value; only `"` / `\` are escaped.
+ */
+export function timelineItemSelector(id: string): string {
+  const escaped = id.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `[data-timeline-id="${escaped}"]`;
+}
+
 /** The geometry a previous report left behind. */
 export interface StreamGeometry {
   scrollTop: number;
@@ -164,6 +187,11 @@ export function TimelinePanel({
   // Rendered mirror of stickToBottom — the ref drives scrolling, this drives paint.
   const [atBottom, setAtBottom] = useState(true);
   const prevKeysRef = useRef<string[]>([]);
+  const pendingLocateId = useRef<string | null>(null);
+  const itemKeysRef = useRef<string[]>([]);
+  const heightOfRef = useRef<(key: string) => number>(() => 0);
+  const [locateGen, setLocateGen] = useState(0);
+  const [locatedId, setLocatedId] = useState<string | null>(null);
 
   // Counts describe what happened, so a message still waiting to run is not
   // one of them — it is appended to `items` for display only.
@@ -339,6 +367,8 @@ export function TimelinePanel({
   const virtual = useVirtualWindow(itemKeys, rootRef, scrollParent, {
     onScrollMetrics,
   });
+  itemKeysRef.current = itemKeys;
+  heightOfRef.current = virtual.heightOf;
 
   // Keep scroll anchored when older pages prepend above the viewport.
   useLayoutEffect(() => {
@@ -352,6 +382,55 @@ export function TimelinePanel({
     prevKeysRef.current = next;
   }, [itemKeys, virtual.heightOf]);
 
+  const locateInAll = useCallback(
+    (id: string) => {
+      pendingLocateId.current = id;
+      setStick(false);
+      setFilter("all");
+      setLocateGen((n) => n + 1);
+    },
+    [setStick],
+  );
+
+  // Scroll + flash after User → All. Depends on locateGen, not itemKeys:
+  // streaming updates rewrite keys and would otherwise cancel the highlight.
+  useLayoutEffect(() => {
+    const id = pendingLocateId.current;
+    if (filter !== "all" || !id) return;
+    pendingLocateId.current = null;
+    setLocatedId(id);
+
+    const tryScroll = (): boolean => {
+      const parent = scrollParentRef.current;
+      const list = rootRef.current;
+      if (!parent || !list) return false;
+      const el = list.querySelector(timelineItemSelector(id));
+      if (el instanceof HTMLElement) {
+        el.scrollIntoView({ block: "center", behavior: "auto" });
+        return true;
+      }
+      const y = offsetBeforeKey(itemKeysRef.current, id, heightOfRef.current);
+      if (y == null) return true;
+      const listTop =
+        list.getBoundingClientRect().top -
+        parent.getBoundingClientRect().top +
+        parent.scrollTop;
+      parent.scrollTop = listTop + y - parent.clientHeight * 0.28;
+      return false;
+    };
+
+    tryScroll();
+    let passes = 0;
+    const interval = window.setInterval(() => {
+      passes += 1;
+      if (tryScroll() || passes >= 12) window.clearInterval(interval);
+    }, 50);
+    const highlight = window.setTimeout(() => setLocatedId(null), 1600);
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(highlight);
+    };
+  }, [filter, locateGen]);
 
   const jumpToLatest = () => {
     // Re-arm stick before scrolling, as the pinBottomSeq path does, so content
@@ -558,6 +637,12 @@ export function TimelinePanel({
                   item={item}
                   stackClass={stackClass}
                   onOpenFile={onOpenFile}
+                  onLocateInAll={
+                    filter === "user" && item.kind === "user"
+                      ? () => locateInAll(item.id)
+                      : undefined
+                  }
+                  located={locatedId === item.id}
                 />
               );
               if (!virtual.active) {
@@ -619,10 +704,14 @@ const LiveItemRow = memo(function LiveItemRow({
   item,
   stackClass,
   onOpenFile,
+  onLocateInAll,
+  located = false,
 }: {
   item: TimelineItem;
   stackClass: string;
   onOpenFile?: (path: string) => void;
+  onLocateInAll?: () => void;
+  located?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const copyTimer = useRef<number | null>(null);
@@ -669,7 +758,21 @@ const LiveItemRow = memo(function LiveItemRow({
   }, [item.detail]);
 
   return (
-    <TimelineRowChrome kind={item.kind} ts={item.ts} stackClass={stackClass}>
+    <TimelineRowChrome
+      kind={item.kind}
+      ts={item.ts}
+      stackClass={stackClass}
+      itemId={item.id}
+      className={
+        [
+          onLocateInAll ? "is-locatable" : "",
+          located ? "is-located" : "",
+        ]
+          .filter(Boolean)
+          .join(" ") || undefined
+      }
+      onActivate={onLocateInAll}
+    >
       {item.kind === "shell" && item.shell ? (
         <ShellCard shell={item.shell} />
       ) : (

@@ -45,4 +45,26 @@ describe("TimelineRowChrome markup", () => {
     expect(row.classes).toContain("tl-stack-continue");
     expect(row.classes).toContain("tl-stack-has-next");
   });
+
+  it("stamps a locatable row with the id All-view scroll looks up", () => {
+    const html = render(
+      <TimelineRowChrome
+        kind="user"
+        ts={TS}
+        stackClass=""
+        itemId="event-user-1"
+        className="is-locatable"
+        onActivate={() => {}}
+      >
+        body
+      </TimelineRowChrome>,
+    );
+
+    const row = withClass(html, "tl-item")[0]!;
+    expect(row.attrs["data-timeline-id"]).toBe("event-user-1");
+    expect(row.attrs.role).toBe("button");
+    expect(row.attrs.tabindex).toBe("0");
+    expect(row.attrs.title).toBe("Show this message in All");
+    expect(row.classes).toContain("is-locatable");
+  });
 });

@@ -572,9 +572,8 @@
   z-index: 3;
   display: flex;
   align-items: flex-end;
-  justify-content: flex-end;
+  justify-content: center;
   height: 0;
-  padding-right: 16px;
 }
 
 .btn.timeline-jump-latest {
@@ -584,7 +583,7 @@
   border-color: var(--border);
   background: var(--bg-menu);
   box-shadow: var(--shadow-md);
-  color: var(--text-muted);
+  color: color-mix(in srgb, var(--text) 70%, var(--text-muted));
   transition:
     color 0.12s ease,
     background 0.12s ease;
@@ -1015,8 +1014,99 @@
   --tl-kind: var(--kind-user);
 }
 
+.tl-item.is-locatable {
+  cursor: pointer;
+}
+
+.tl-item.is-locatable:hover {
+  background: color-mix(in srgb, var(--kind-user) 10%, transparent);
+}
+
+.tl-item.is-locatable:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--kind-user) 45%, transparent);
+  outline-offset: -1px;
+}
+
+.tl-item.is-located {
+  scroll-margin-block: 48px;
+  animation: tl-locate-flash 1.4s ease;
+}
+
+@keyframes tl-locate-flash {
+  0% {
+    background: color-mix(in srgb, var(--kind-user) 22%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tl-item.is-located {
+    animation: none;
+    background: color-mix(in srgb, var(--kind-user) 14%, transparent);
+  }
+}
+
 .tl-item.kind-user .tl-title {
   color: color-mix(in srgb, var(--kind-user) 42%, var(--text));
+}
+
+/*
+ * All-view conversation: user turns sit on the right as a chat bubble.
+ * The filtered User list stays a left-aligned scan list — right-aligning
+ * every row there would be a column of bubbles with no other speaker.
+ */
+.stream-timeline:not(.is-filtered) .tl-item.kind-user {
+  align-items: flex-end;
+  border-top-color: transparent;
+}
+
+.stream-timeline:not(.is-filtered) .tl-item.kind-user .tl-body {
+  width: fit-content;
+  max-width: min(42em, 78%);
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border-radius: 12px 12px 4px 12px;
+  background: color-mix(in srgb, var(--kind-user) 14%, var(--bg-elevated));
+}
+
+.stream-timeline:not(.is-filtered) .tl-item.kind-user .tl-detail-footer {
+  position: static;
+  right: auto;
+  bottom: auto;
+  transform: none;
+  justify-content: flex-end;
+  padding-top: 6px;
+}
+
+.stream-timeline:not(.is-filtered) .tl-item.kind-user .tl-pending-actions {
+  justify-content: flex-end;
+}
+
+.stream-timeline:not(.is-filtered) .tl-item.kind-user.is-located {
+  animation: none;
+  background: transparent;
+}
+
+.stream-timeline:not(.is-filtered) .tl-item.kind-user.is-located .tl-body {
+  animation: tl-locate-user-flash 1.4s ease;
+}
+
+@keyframes tl-locate-user-flash {
+  0% {
+    background: color-mix(in srgb, var(--kind-user) 30%, var(--bg-elevated));
+  }
+  100% {
+    background: color-mix(in srgb, var(--kind-user) 14%, var(--bg-elevated));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-timeline:not(.is-filtered) .tl-item.kind-user.is-located .tl-body {
+    animation: none;
+    background: color-mix(in srgb, var(--kind-user) 22%, var(--bg-elevated));
+  }
 }
 
 .tl-item.kind-agent {
