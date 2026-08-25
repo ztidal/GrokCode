@@ -16,6 +16,7 @@ import type {
 import { writeClipboard } from "../utils/clipboard";
 import { extractToolPath } from "../utils/paths";
 import {
+  isFullKeyReplace,
   prependHeightDelta,
   useVirtualWindow,
   type VirtualScrollMetrics,
@@ -74,6 +75,20 @@ export function isNearTimelineBottom(m: VirtualScrollMetrics): boolean {
  */
 export function isAtTimelineBottom(m: VirtualScrollMetrics): boolean {
   return m.scrollHeight - m.scrollTop - m.clientHeight <= 2;
+}
+
+/**
+ * Viewport-top of the list, in list coordinates, for `--timeline-fade-offset`.
+ *
+ * `tab-body` is shared across sessions, so a leftover `scrollTop` from a
+ * longer stream can sit past the new list. Unclamped, the mask's transparent
+ * band covers the whole stream — blank until the next `scroll` event, which
+ * WebKit often does not fire when content shrinks.
+ */
+export function timelineMaskOffset(m: VirtualScrollMetrics): number {
+  const maxScroll = Math.max(0, m.scrollHeight - m.clientHeight);
+  const scrollTop = Math.min(Math.max(0, m.scrollTop), maxScroll);
+  return scrollTop - m.listTop;
 }
 
 /** Distance from the list top to `key`, using measured or estimated row heights. */
@@ -359,7 +374,7 @@ export function TimelinePanel({
     if (root) {
       root.style.setProperty(
         "--timeline-fade-offset",
-        `${m.scrollTop - m.listTop}px`,
+        `${timelineMaskOffset(m)}px`,
       );
     }
   }, [applyStick, scrollToEnd]);
@@ -371,16 +386,29 @@ export function TimelinePanel({
   heightOfRef.current = virtual.heightOf;
 
   // Keep scroll anchored when older pages prepend above the viewport.
+  // A full replace is a different session: leftover scrollTop / mask offset
+  // hide the new stream until a wheel event (and WebKit often will not fire
+  // one when the content shrinks).
   useLayoutEffect(() => {
     const prev = prevKeysRef.current;
     const next = itemKeys;
     const parent = scrollParentRef.current;
     if (parent && prev.length > 0) {
-      const delta = prependHeightDelta(prev, next, virtual.heightOf);
-      if (delta > 0) parent.scrollTop += delta;
+      if (isFullKeyReplace(prev, next)) {
+        setStick(true);
+        lastScrollTop.current = 0;
+        lastScrollHeight.current = 0;
+        const root = rootRef.current;
+        if (root) root.style.setProperty("--timeline-fade-offset", "-42px");
+        parent.scrollTop = 0;
+        scrollToEnd("auto");
+      } else {
+        const delta = prependHeightDelta(prev, next, virtual.heightOf);
+        if (delta > 0) parent.scrollTop += delta;
+      }
     }
     prevKeysRef.current = next;
-  }, [itemKeys, virtual.heightOf]);
+  }, [itemKeys, virtual.heightOf, setStick, scrollToEnd]);
 
   const locateInAll = useCallback(
     (id: string) => {

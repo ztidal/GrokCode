@@ -4,6 +4,7 @@ import {
   offsetBeforeKey,
   readStickIntent,
   timelineItemSelector,
+  timelineMaskOffset,
 } from "./TimelinePanel";
 import type { VirtualScrollMetrics } from "../hooks/useVirtualWindow";
 
@@ -31,6 +32,35 @@ describe("timelineItemSelector", () => {
     expect(timelineItemSelector('a"b\\c')).toBe(
       '[data-timeline-id="a\\"b\\\\c"]',
     );
+  });
+});
+
+describe("timelineMaskOffset", () => {
+  const at = (
+    scrollTop: number,
+    extra: Partial<VirtualScrollMetrics> = {},
+  ): VirtualScrollMetrics => ({
+    scrollHeight: 2000,
+    clientHeight: 600,
+    scrollTop,
+    listTop: 40,
+    ...extra,
+  });
+
+  it("is the viewport top in list coordinates", () => {
+    expect(timelineMaskOffset(at(1040))).toBe(1000);
+  });
+
+  it("clamps leftover scrollTop from a longer previous stream", () => {
+    // Switching sessions leaves tab-body.scrollTop past the new list.
+    // The fade mask is painted in list coordinates; an unclamped offset
+    // puts the whole new stream in the transparent band until a wheel
+    // event, which WebKit often does not fire when content shrinks.
+    expect(
+      timelineMaskOffset(
+        at(19000, { scrollHeight: 3000, clientHeight: 800, listTop: 40 }),
+      ),
+    ).toBe(2160);
   });
 });
 

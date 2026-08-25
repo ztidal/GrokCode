@@ -286,3 +286,17 @@ export function prependHeightDelta(
   for (let i = 0; i < idx; i++) delta += heightOf(nextKeys[i]);
   return delta;
 }
+
+/**
+ * True when `nextKeys` is a different stream, not a prepend/append on the
+ * same one. Switching sessions replaces the list; leftover scrollTop and
+ * the fade mask then hide the new content until a wheel event.
+ */
+export function isFullKeyReplace(
+  prevKeys: readonly string[],
+  nextKeys: readonly string[],
+): boolean {
+  if (prevKeys.length === 0) return false;
+  if (nextKeys.length === 0) return true;
+  return !nextKeys.includes(prevKeys[0]);
+}

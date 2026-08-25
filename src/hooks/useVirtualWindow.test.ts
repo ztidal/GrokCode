@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeVirtualRange,
+  isFullKeyReplace,
   prependHeightDelta,
   VIRTUAL_WINDOW_MIN_COUNT,
 } from "./useVirtualWindow";
@@ -28,6 +29,20 @@ describe("prependHeightDelta", () => {
     expect(
       prependHeightDelta(["a", "b"], ["x", "y", "z"], heightOf),
     ).toBe(0);
+  });
+});
+
+describe("isFullKeyReplace", () => {
+  it("is false on first paint, prepend, and append", () => {
+    expect(isFullKeyReplace([], ["a"])).toBe(false);
+    expect(isFullKeyReplace(["a", "b"], ["new", "a", "b"])).toBe(false);
+    expect(isFullKeyReplace(["a", "b"], ["a", "b", "c"])).toBe(false);
+    expect(isFullKeyReplace(["a", "b"], ["a", "b"])).toBe(false);
+  });
+
+  it("is true when the previous head is gone — a different session's stream", () => {
+    expect(isFullKeyReplace(["a", "b", "c"], ["x", "y"])).toBe(true);
+    expect(isFullKeyReplace(["a"], [])).toBe(true);
   });
 });
 
