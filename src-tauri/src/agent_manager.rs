@@ -14,6 +14,7 @@ use crate::rpc_handler::{self, HandleResult, ResponseAction};
 use crate::shell_emitter;
 use crate::shell_stream::ShellStream;
 use crate::task_prefs;
+use crate::taskbar_badge;
 use parking_lot::Mutex;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -840,6 +841,9 @@ impl AgentManager {
             agent.info.clone()
         };
         Self::emit_status(inner, &updated);
+        if let Some(app) = inner.app.lock().clone() {
+            taskbar_badge::on_turn_completed(&app);
+        }
     }
 
     fn dispatch_handle_request(

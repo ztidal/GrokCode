@@ -30,6 +30,7 @@ mod shell_emitter;
 mod shell_stream;
 mod skill_catalog;
 mod task_prefs;
+mod taskbar_badge;
 mod watcher;
 #[cfg(windows)]
 mod windows_icons;
@@ -800,10 +801,10 @@ pub fn run() {
                 // only `main` leaves that window up, so the process never
                 // exits and the next click on Close looks like a no-op.
                 let handle = app.handle().clone();
-                window.on_window_event(move |event| {
-                    if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
-                        handle.exit(0);
-                    }
+                window.on_window_event(move |event| match event {
+                    tauri::WindowEvent::CloseRequested { .. } => handle.exit(0),
+                    tauri::WindowEvent::Focused(true) => taskbar_badge::clear(&handle),
+                    _ => {}
                 });
             }
             // Tauri's default window icon is a single ICO frame; re-apply native
