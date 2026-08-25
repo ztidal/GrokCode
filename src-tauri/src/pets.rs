@@ -98,6 +98,62 @@ fn prefs_path() -> PathBuf {
     app_home().join("pets.json")
 }
 
+/// Bundled defaults live under `src-tauri/resources/pets` and ship next to the
+/// binary. Existing folders in `~/.codex/pets` are left alone.
+pub fn copy_missing_pets(src: &Path, dest: &Path) -> u32 {
+    let Ok(entries) = fs::read_dir(src) else {
+        return 0;
+    };
+    let mut copied = 0;
+    for entry in entries.flatten() {
+        let from = entry.path();
+        if !from.is_dir() {
+            continue;
+        }
+        let Some(name) = from.file_name() else {
+            continue;
+        };
+        let to = dest.join(name);
+        if to.exists() {
+            continue;
+        }
+        if copy_pet_dir(&from, &to).is_ok() {
+            copied += 1;
+        }
+    }
+    copied
+}
+
+fn copy_pet_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(to)?;
+    for entry in fs::read_dir(from)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() {
+            fs::copy(&path, to.join(entry.file_name()))?;
+        }
+    }
+    Ok(())
+}
+
+pub fn seed_bundled_pets(app: &AppHandle) {
+    let Ok(resource) = app.path().resource_dir() else {
+        return;
+    };
+    let candidates = [
+        resource.join("resources").join("pets"),
+        resource.join("pets"),
+    ];
+    let Some(src) = candidates.iter().find(|p| p.is_dir()) else {
+        return;
+    };
+    let dest = pets_home();
+    let n = copy_missing_pets(src, &dest);
+    if n > 0 {
+        tracing::info!("seeded {n} bundled Codex pets into {}", dest.display());
+    }
+}
+
 fn strip_bom(raw: &str) -> &str {
     raw.strip_prefix('\u{feff}').unwrap_or(raw)
 }
@@ -306,6 +362,7 @@ fn create_window(app: &AppHandle, prefs: &PetPrefs) -> Result<(), String> {
 /// The webview is kept alive for the process lifetime. Destroying it to "turn
 /// the pet off" is what froze clicks in the main window.
 pub fn sync_window(app: &AppHandle) -> Result<(), String> {
+    seed_bundled_pets(app);
     let prefs = load_prefs_file(&prefs_path());
     let pets = scan_pets_dir(&pets_home());
     if !prefs.enabled || pets.is_empty() {
@@ -316,7 +373,8 @@ pub fn sync_window(app: &AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn list_codex_pets() -> Vec<CodexPet> {
+pub fn list_codex_pets(app: AppHandle) -> Vec<CodexPet> {
+    seed_bundled_pets(&app);
     scan_pets_dir(&pets_home())
 }
 
@@ -438,6 +496,36 @@ mod tests {
         let pets = scan_pets_dir(&root);
         assert_eq!(pets[0].id, "niulai");
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn copies_bundled_pets_only_when_the_folder_is_missing() {
+        let src = temp_dir("seed-src");
+        let dest = temp_dir("seed-dest");
+        write_pkg(
+            &src,
+            "daodun",
+            r#"{ "id": "daodun", "spritesheetPath": "spritesheet-r2.webp" }"#,
+            "spritesheet-r2.webp",
+        );
+        write_pkg(
+            &src,
+            "niulai",
+            r#"{ "id": "niulai", "spritesheetPath": "spritesheet.webp" }"#,
+            "spritesheet.webp",
+        );
+        fs::create_dir_all(dest.join("niulai")).unwrap();
+        fs::write(dest.join("niulai/pet.json"), "keep-me").unwrap();
+
+        assert_eq!(copy_missing_pets(&src, &dest), 1);
+        assert!(dest.join("daodun/pet.json").is_file());
+        assert_eq!(
+            fs::read_to_string(dest.join("niulai/pet.json")).unwrap(),
+            "keep-me"
+        );
+        assert_eq!(copy_missing_pets(&src, &dest), 0);
+        let _ = fs::remove_dir_all(&src);
+        let _ = fs::remove_dir_all(&dest);
     }
 
     #[test]
