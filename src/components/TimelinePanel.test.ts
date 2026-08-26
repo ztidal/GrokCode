@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   chatKindCount,
+  fallbackTimelineFilter,
   isNearTimelineBottom,
   matchesTimelineFilter,
   offsetBeforeKey,
@@ -45,6 +46,24 @@ describe("chatKindCount", () => {
       5,
     );
     expect(chatKindCount(new Map([["tool", 4]]))).toBe(0);
+  });
+});
+
+describe("fallbackTimelineFilter", () => {
+  it("keeps Chat while the stream is empty, so a loading session does not land on All", () => {
+    expect(fallbackTimelineFilter("chat", new Map(), 0)).toBe("chat");
+  });
+
+  it("keeps Chat when user or agent cards are present", () => {
+    expect(
+      fallbackTimelineFilter("chat", new Map([["user", 1]]), 3),
+    ).toBe("chat");
+  });
+
+  it("leaves Chat only when a loaded stream has no conversation", () => {
+    expect(
+      fallbackTimelineFilter("chat", new Map([["tool", 2]]), 2),
+    ).toBe("all");
   });
 });
 

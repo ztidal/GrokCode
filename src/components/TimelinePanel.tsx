@@ -132,6 +132,26 @@ export function chatKindCount(kindCounts: Map<string, number>): number {
   return (kindCounts.get("user") ?? 0) + (kindCounts.get("agent") ?? 0);
 }
 
+/**
+ * When a kind chip's stream goes empty, fall back to All so the indicator
+ * still has a chip. Chat is the default: an empty or still-hydrating stream
+ * must not kick us off it, or the first paint of a loading session would
+ * land on All and stay there.
+ */
+export function fallbackTimelineFilter(
+  filter: TimelineFilterKind,
+  kindCounts: Map<string, number>,
+  itemCount: number,
+): TimelineFilterKind {
+  if (filter === "all") return "all";
+  if (filter === "chat") {
+    if (itemCount > 0 && chatKindCount(kindCounts) === 0) return "all";
+    return "chat";
+  }
+  if ((kindCounts.get(filter) ?? 0) === 0) return "all";
+  return filter;
+}
+
 /** The geometry a previous report left behind. */
 export interface StreamGeometry {
   scrollTop: number;
@@ -285,13 +305,9 @@ export function TimelinePanel({
   }, [filterChips, syncFilterIndicator]);
 
   useEffect(() => {
-    if (filter === "all") return;
-    const n =
-      filter === "chat"
-        ? chatKindCount(kindCounts)
-        : (kindCounts.get(filter) ?? 0);
-    if (n === 0) setFilter("all");
-  }, [filter, kindCounts]);
+    const next = fallbackTimelineFilter(filter, kindCounts, items.length);
+    if (next !== filter) setFilter(next);
+  }, [filter, kindCounts, items.length]);
 
   const filtered = useMemo(() => {
     const indexed = items.map((item, sourceIndex) => ({ item, sourceIndex }));
