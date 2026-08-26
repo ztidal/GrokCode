@@ -429,6 +429,10 @@
   --chip-accent: var(--text-muted);
   --chip-bg-active: color-mix(in srgb, var(--text-muted) 22%, var(--rp-surface));
 }
+.timeline-filter-chip.filter-chat {
+  --chip-accent: var(--text);
+  --chip-bg-active: color-mix(in srgb, var(--text) 18%, var(--rp-surface));
+}
 
 @media (prefers-reduced-motion: reduce) {
   .timeline-filter-indicator {
@@ -1053,16 +1057,16 @@
 }
 
 /*
- * All-view conversation: user turns sit on the right as a chat bubble.
- * The filtered User list stays a left-aligned scan list — right-aligning
+ * All and Chat: user turns sit on the right as a chat bubble.
+ * The User-only list stays a left-aligned scan list — right-aligning
  * every row there would be a column of bubbles with no other speaker.
  */
-.stream-timeline:not(.is-filtered) .tl-item.kind-user {
+.stream-timeline.is-conversation .tl-item.kind-user {
   align-items: flex-end;
   border-top-color: transparent;
 }
 
-.stream-timeline:not(.is-filtered) .tl-item.kind-user .tl-body {
+.stream-timeline.is-conversation .tl-item.kind-user .tl-body {
   width: fit-content;
   max-width: min(42em, 78%);
   box-sizing: border-box;
@@ -1071,7 +1075,7 @@
   background: color-mix(in srgb, var(--kind-user) 14%, var(--bg-elevated));
 }
 
-.stream-timeline:not(.is-filtered) .tl-item.kind-user .tl-detail-footer {
+.stream-timeline.is-conversation .tl-item.kind-user .tl-detail-footer {
   position: static;
   right: auto;
   bottom: auto;
@@ -1080,16 +1084,16 @@
   padding-top: 6px;
 }
 
-.stream-timeline:not(.is-filtered) .tl-item.kind-user .tl-pending-actions {
+.stream-timeline.is-conversation .tl-item.kind-user .tl-pending-actions {
   justify-content: flex-end;
 }
 
-.stream-timeline:not(.is-filtered) .tl-item.kind-user.is-located {
+.stream-timeline.is-conversation .tl-item.kind-user.is-located {
   animation: none;
   background: transparent;
 }
 
-.stream-timeline:not(.is-filtered) .tl-item.kind-user.is-located .tl-body {
+.stream-timeline.is-conversation .tl-item.kind-user.is-located .tl-body {
   animation: tl-locate-user-flash 1.4s ease;
 }
 
@@ -1103,7 +1107,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stream-timeline:not(.is-filtered) .tl-item.kind-user.is-located .tl-body {
+  .stream-timeline.is-conversation .tl-item.kind-user.is-located .tl-body {
     animation: none;
     background: color-mix(in srgb, var(--kind-user) 22%, var(--bg-elevated));
   }

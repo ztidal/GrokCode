@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  chatKindCount,
   isNearTimelineBottom,
+  matchesTimelineFilter,
   offsetBeforeKey,
   readStickIntent,
   timelineItemSelector,
@@ -18,6 +20,31 @@ describe("offsetBeforeKey", () => {
 
   it("is null when the key is not in the list", () => {
     expect(offsetBeforeKey(["a", "b"], "missing", heightOf)).toBeNull();
+  });
+});
+
+describe("matchesTimelineFilter", () => {
+  it("keeps pending rows under every filter", () => {
+    const pending = { kind: "user", pending: { state: "queued" as const } };
+    expect(matchesTimelineFilter("all", pending)).toBe(true);
+    expect(matchesTimelineFilter("chat", pending)).toBe(true);
+    expect(matchesTimelineFilter("tool", pending)).toBe(true);
+  });
+
+  it("Chat is user and agent only", () => {
+    expect(matchesTimelineFilter("chat", { kind: "user" })).toBe(true);
+    expect(matchesTimelineFilter("chat", { kind: "agent" })).toBe(true);
+    expect(matchesTimelineFilter("chat", { kind: "tool" })).toBe(false);
+    expect(matchesTimelineFilter("chat", { kind: "thought" })).toBe(false);
+  });
+});
+
+describe("chatKindCount", () => {
+  it("sums user and agent cards", () => {
+    expect(chatKindCount(new Map([["user", 2], ["agent", 3], ["tool", 9]]))).toBe(
+      5,
+    );
+    expect(chatKindCount(new Map([["tool", 4]]))).toBe(0);
   });
 });
 

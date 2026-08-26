@@ -45,6 +45,7 @@ describe("timeline filter bar markup", () => {
     const chips = withClass(html, "timeline-filter-chip");
     expect(chips.map((chip) => chip.attrs["data-filter-kind"])).toEqual([
       "all",
+      "chat",
       "user",
       "agent",
       "tool",
@@ -78,10 +79,16 @@ describe("timeline filter bar markup", () => {
     expect(all!.classes).toContain("active");
   });
 
-  it("leaves All without `is-filtered`, which is what the user-chat CSS keys off", () => {
+  it("leaves All without `is-filtered` and with `is-conversation`", () => {
     const html = renderPanel([item("a", "user"), item("b", "agent")]);
     const stream = withClass(html, "stream-timeline")[0]!;
     expect(stream.classes).not.toContain("is-filtered");
+    expect(stream.classes).toContain("is-conversation");
     expect(withClass(html, "kind-user")).toHaveLength(1);
+    const chat = withClass(html, "timeline-filter-chip").find(
+      (chip) => chip.attrs["data-filter-kind"] === "chat",
+    );
+    expect(chat, "no Chat chip when user and agent are present").toBeDefined();
+    expect(chat!.classes).toContain("filter-chat");
   });
 });

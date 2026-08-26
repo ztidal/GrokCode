@@ -32,6 +32,7 @@ import type { PromptQueueController } from "../hooks/usePromptQueueController";
 
 const TIMELINE_FILTER_LABELS: Record<string, string> = {
   all: "All",
+  chat: "Chat",
   user: "User",
   agent: "Agent",
   thought: "Thought",
@@ -45,6 +46,7 @@ const TIMELINE_FILTER_LABELS: Record<string, string> = {
 
 const TIMELINE_FILTER_ORDER: TimelineFilterKind[] = [
   "all",
+  "chat",
   "user",
   "agent",
   "thought",
@@ -112,6 +114,22 @@ export function offsetBeforeKey(
 export function timelineItemSelector(id: string): string {
   const escaped = id.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   return `[data-timeline-id="${escaped}"]`;
+}
+
+/** User + Agent only — the Chat filter. Pending rows survive every filter. */
+export function matchesTimelineFilter(
+  filter: TimelineFilterKind,
+  item: { kind: string; pending?: unknown },
+): boolean {
+  if (item.pending) return true;
+  if (filter === "all") return true;
+  const kind = item.kind || "unknown";
+  if (filter === "chat") return kind === "user" || kind === "agent";
+  return kind === filter;
+}
+
+export function chatKindCount(kindCounts: Map<string, number>): number {
+  return (kindCounts.get("user") ?? 0) + (kindCounts.get("agent") ?? 0);
 }
 
 /** The geometry a previous report left behind. */
@@ -222,7 +240,10 @@ export function TimelinePanel({
 
   const filterChips = useMemo(() => {
     const present = TIMELINE_FILTER_ORDER.filter(
-      (k) => k === "all" || (kindCounts.get(k) ?? 0) > 0,
+      (k) =>
+        k === "all" ||
+        (k === "chat" && chatKindCount(kindCounts) > 0) ||
+        (k !== "chat" && (kindCounts.get(k) ?? 0) > 0),
     );
     for (const k of kindCounts.keys()) {
       if (!present.includes(k as TimelineFilterKind)) {
@@ -265,18 +286,19 @@ export function TimelinePanel({
 
   useEffect(() => {
     if (filter === "all") return;
-    if ((kindCounts.get(filter) ?? 0) === 0) setFilter("all");
+    const n =
+      filter === "chat"
+        ? chatKindCount(kindCounts)
+        : (kindCounts.get(filter) ?? 0);
+    if (n === 0) setFilter("all");
   }, [filter, kindCounts]);
 
   const filtered = useMemo(() => {
     const indexed = items.map((item, sourceIndex) => ({ item, sourceIndex }));
-    if (filter === "all") return indexed;
     // A message that has not run survives every filter. It is not history to
     // be sifted, it is the tail of the composer — and its controls are the only
     // way to reorder or cancel it, which a filter should not be able to hide.
-    return indexed.filter(
-      ({ item }) => Boolean(item.pending) || (item.kind || "unknown") === filter,
-    );
+    return indexed.filter(({ item }) => matchesTimelineFilter(filter, item));
   }, [items, filter]);
 
   const itemKeys = useMemo(
@@ -597,7 +619,9 @@ export function TimelinePanel({
           const count =
             k === "all"
               ? items.reduce((n, item) => (item.pending ? n : n + 1), 0)
-              : (kindCounts.get(k) ?? 0);
+              : k === "chat"
+                ? chatKindCount(kindCounts)
+                : (kindCounts.get(k) ?? 0);
           const label = TIMELINE_FILTER_LABELS[k] ?? k;
           return (
             <button
@@ -625,8 +649,10 @@ export function TimelinePanel({
       ) : (
         <div
           className={`timeline stream-timeline${
-            filter === "all" ? "" : " is-filtered"
-          }${virtual.active ? " is-virtualized" : ""}`}
+            filter === "all" || filter === "chat" ? " is-conversation" : ""
+          }${filter === "all" ? "" : " is-filtered"}${
+            virtual.active ? " is-virtualized" : ""
+          }`}
           ref={rootRef}
           style={
             virtual.active
@@ -666,7 +692,8 @@ export function TimelinePanel({
                   stackClass={stackClass}
                   onOpenFile={onOpenFile}
                   onLocateInAll={
-                    filter === "user" && item.kind === "user"
+                    (filter === "user" || filter === "chat") &&
+                    item.kind === "user"
                       ? () => locateInAll(item.id)
                       : undefined
                   }

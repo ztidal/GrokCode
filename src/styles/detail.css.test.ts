@@ -37,12 +37,12 @@ describe("timeline row styling", () => {
     expect(applied![1]).toBe("tl-item");
   });
 
-  it("right-aligns user rows only in the unfiltered All stream", () => {
-    // `.is-filtered` is the User/Agent/… views. A selector that omitted the
-    // `:not(.is-filtered)` would push the User scan-list to the right too.
+  it("right-aligns user rows in All and Chat, not the User scan-list", () => {
+    // `.is-conversation` is All and Chat. A selector on `:not(.is-filtered)`
+    // would miss Chat; a bare `.kind-user` would push the User list right too.
     const rule = css.match(
-      /\.stream-timeline:not\(\.is-filtered\)\s+\.tl-item\.kind-user\s*\{[^}]*align-items:\s*flex-end/,
+      /\.stream-timeline\.is-conversation\s+\.tl-item\.kind-user\s*\{[^}]*align-items:\s*flex-end/,
     );
-    expect(rule, "All-view user chat alignment missing").not.toBeNull();
+    expect(rule, "conversation user chat alignment missing").not.toBeNull();
   });
 });

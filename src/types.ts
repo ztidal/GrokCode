@@ -133,9 +133,10 @@ export interface WeekUsage {
 /** Center panel tabs. Timeline = ACP stream + disk hydrate. */
 export type MainTab = "timeline" | "diff" | "raw";
 
-/** Timeline filter chip (plus `"all"`). */
+/** Timeline filter chip (plus `"all"` / `"chat"`). */
 export type TimelineFilterKind =
   | "all"
+  | "chat"
   | "user"
   | "agent"
   | "thought"
