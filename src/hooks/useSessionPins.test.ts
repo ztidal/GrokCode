@@ -17,10 +17,9 @@ describe("pin persistence", () => {
     expect(parseStoredPins(serializePins(ids))).toEqual(ids);
   });
 
-  it("writes a stable spelling for an unchanged set", () => {
-    expect(serializePins(new Set(["s-b", "s-a"]))).toBe(
-      serializePins(new Set(["s-a", "s-b"])),
-    );
+  it("keeps insertion order, which is pin time", () => {
+    expect(serializePins(new Set(["s-b", "s-a"]))).toBe('["s-b","s-a"]');
+    expect([...parseStoredPins('["s-b","s-a"]')]).toEqual(["s-b", "s-a"]);
   });
 
   it("treats an absent or unusable value as nothing pinned", () => {
@@ -83,6 +82,16 @@ describe("sortPinnedFirst", () => {
       (x, y) => x.rank - y.rank,
     );
     expect(sorted.map((i) => i.id)).toEqual(["b", "a", "c"]);
+  });
+
+  it("does not let the tiebreak reshuffle two pins", () => {
+    // Pin time is b then a; compare would put a first.
+    const sorted = sortPinnedFirst(
+      [item("a", 0), item("b", 5)],
+      new Set(["b", "a"]),
+      (x, y) => x.rank - y.rank,
+    );
+    expect(sorted.map((i) => i.id)).toEqual(["b", "a"]);
   });
 
   it("falls back to the tiebreak alone when nothing is pinned", () => {

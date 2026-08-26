@@ -216,7 +216,7 @@ export function TimelinePanel({
   const scrollParentRef = useRef<HTMLElement | null>(null);
   const [scrollParent, setScrollParent] = useState<HTMLElement | null>(null);
   const filterBarRef = useRef<HTMLDivElement>(null);
-  const [filter, setFilter] = useState<TimelineFilterKind>("all");
+  const [filter, setFilter] = useState<TimelineFilterKind>("chat");
   // Rendered mirror of stickToBottom — the ref drives scrolling, this drives paint.
   const [atBottom, setAtBottom] = useState(true);
   const prevKeysRef = useRef<string[]>([]);

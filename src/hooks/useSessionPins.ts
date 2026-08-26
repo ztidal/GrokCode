@@ -18,20 +18,23 @@ export {
 };
 
 /**
- * Pinned items first, the rest in `compare` order.
- *
- * `Array.prototype.sort` is stable, so anything `compare` calls equal keeps the
- * order it arrived in — the caller's paging order survives inside each half.
+ * Pinned items first, in the pin-set's own order (pin time: first pinned
+ * stays first). `compare` ranks only the unpinned half — a pin is the user's
+ * ordering, and must not reshuffle when a card goes idle.
  */
 export function sortPinnedFirst<T extends { id: string }>(
   items: readonly T[],
   pinned: ReadonlySet<string>,
   compare?: (a: T, b: T) => number,
 ): T[] {
+  const pinRank = new Map([...pinned].map((id, i) => [id, i]));
   return [...items].sort((a, b) => {
-    const ap = pinned.has(a.id) ? 0 : 1;
-    const bp = pinned.has(b.id) ? 0 : 1;
-    return ap - bp || (compare ? compare(a, b) : 0);
+    const ar = pinRank.get(a.id);
+    const br = pinRank.get(b.id);
+    if (ar !== undefined && br !== undefined) return ar - br;
+    if (ar !== undefined) return -1;
+    if (br !== undefined) return 1;
+    return compare ? compare(a, b) : 0;
   });
 }
 

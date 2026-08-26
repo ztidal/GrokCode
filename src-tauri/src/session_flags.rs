@@ -30,14 +30,14 @@ use crate::{fs_atomic, multi_instance};
 
 /// Both sets, whole — what the file holds and what every command answers.
 ///
-/// `BTreeSet`s so the file has one spelling for one pair of sets: sorted
-/// arrays with no duplicates, which keeps every diff and every sync between
-/// two machines free of rewrite noise. Each list defaults independently, so a
-/// hand-edited file holding only one of them does not read as both empty.
+/// Pinned is a `Vec` so the file order is pin time (append on pin, leave
+/// alone afterwards). Archived is a `BTreeSet`: membership only, one sorted
+/// spelling. Each list defaults independently, so a hand-edited file holding
+/// only one of them does not read as both empty.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct SessionFlags {
     #[serde(default)]
-    pub pinned: BTreeSet<String>,
+    pub pinned: Vec<String>,
     #[serde(default)]
     pub archived: BTreeSet<String>,
 }
@@ -90,14 +90,23 @@ fn set_at(path: &Path, session_id: &str, flag: Flag, value: bool) -> Result<Sess
     // in-memory copy.
     let _lock = multi_instance::lock_sidecar(path)?;
     let mut flags = load_at(path);
-    let set = match flag {
-        Flag::Pinned => &mut flags.pinned,
-        Flag::Archived => &mut flags.archived,
-    };
-    if value {
-        set.insert(session_id.to_string());
-    } else {
-        set.remove(session_id);
+    match flag {
+        Flag::Pinned => {
+            if value {
+                if !flags.pinned.iter().any(|id| id == session_id) {
+                    flags.pinned.push(session_id.to_string());
+                }
+            } else {
+                flags.pinned.retain(|id| id != session_id);
+            }
+        }
+        Flag::Archived => {
+            if value {
+                flags.archived.insert(session_id.to_string());
+            } else {
+                flags.archived.remove(session_id);
+            }
+        }
     }
     fs_atomic::write_json_atomic(path, &flags)?;
     Ok(flags)
@@ -128,9 +137,11 @@ fn merge_at(
     // Garbage ids are dropped, not refused: the source is localStorage, which
     // anyone can edit in devtools, and one bad entry refusing the whole call
     // would wedge the migration behind an error on every launch.
-    flags
-        .pinned
-        .extend(pinned.into_iter().filter(|id| is_safe_id(id)));
+    for id in pinned.into_iter().filter(|id| is_safe_id(id)) {
+        if !flags.pinned.iter().any(|have| have == &id) {
+            flags.pinned.push(id);
+        }
+    }
     flags
         .archived
         .extend(archived.into_iter().filter(|id| is_safe_id(id)));
@@ -172,7 +183,7 @@ mod tests {
         let path = scratch("partial");
         fs::write(&path, r#"{"pinned":["a"]}"#).expect("write");
         let flags = load_at(&path);
-        assert!(flags.pinned.contains("a"));
+        assert!(flags.pinned.iter().any(|id| id == "a"));
         assert!(flags.archived.is_empty(), "absent is empty, not corrupt");
         let _ = fs::remove_file(&path);
     }
@@ -181,7 +192,7 @@ mod tests {
     fn a_flag_survives_being_written_and_read_back() {
         let path = scratch("roundtrip");
         let flags = set_at(&path, "session-1", Flag::Pinned, true).expect("set");
-        assert!(flags.pinned.contains("session-1"));
+        assert!(flags.pinned.iter().any(|id| id == "session-1"));
         assert_eq!(
             load_at(&path),
             flags,
@@ -208,7 +219,7 @@ mod tests {
         set_at(&path, "both", Flag::Pinned, true).expect("pin");
         set_at(&path, "both", Flag::Archived, true).expect("archive");
         let flags = set_at(&path, "both", Flag::Pinned, false).expect("unpin");
-        assert!(!flags.pinned.contains("both"));
+        assert!(!flags.pinned.iter().any(|id| id == "both"));
         assert!(
             flags.archived.contains("both"),
             "the other set keeps its entry"
@@ -217,14 +228,18 @@ mod tests {
     }
 
     #[test]
-    fn the_file_spells_each_set_sorted() {
-        let path = scratch("sorted");
+    fn pinning_appends_so_the_file_is_pin_time_order() {
+        let path = scratch("pin-order");
         set_at(&path, "b", Flag::Pinned, true).expect("b");
         set_at(&path, "a", Flag::Pinned, true).expect("a");
-        let raw = fs::read_to_string(&path).expect("read");
-        let a = raw.find("\"a\"").expect("a is in the file");
-        let b = raw.find("\"b\"").expect("b is in the file");
-        assert!(a < b, "insertion order must not leak into the file: {raw}");
+        let flags = load_at(&path);
+        assert_eq!(flags.pinned, vec!["b".to_string(), "a".to_string()]);
+        // Pinning again must not move it — that is the "stop reshuffling" rule.
+        set_at(&path, "b", Flag::Pinned, true).expect("re-pin b");
+        assert_eq!(
+            load_at(&path).pinned,
+            vec!["b".to_string(), "a".to_string()]
+        );
         let _ = fs::remove_file(&path);
     }
 
@@ -262,8 +277,11 @@ mod tests {
         let path = scratch("union");
         set_at(&path, "kept", Flag::Pinned, true).expect("seed");
         let flags = merge_at(&path, ids(&["new-pin"]), ids(&["new-archive"])).expect("merge");
-        assert!(flags.pinned.contains("kept"), "a merge must not replace");
-        assert!(flags.pinned.contains("new-pin"));
+        assert!(
+            flags.pinned.iter().any(|id| id == "kept"),
+            "a merge must not replace"
+        );
+        assert!(flags.pinned.iter().any(|id| id == "new-pin"));
         assert!(flags.archived.contains("new-archive"));
         // The same merge again changes nothing — which is what lets two
         // windows migrate the same localStorage without coordinating.
@@ -277,7 +295,7 @@ mod tests {
         let path = scratch("garbage");
         let flags = merge_at(&path, ids(&["../escape", "good-id"]), ids(&["has space"]))
             .expect("localStorage junk must not wedge the migration");
-        assert_eq!(flags.pinned, BTreeSet::from(["good-id".to_string()]));
+        assert_eq!(flags.pinned, vec!["good-id".to_string()]);
         assert!(flags.archived.is_empty());
         let _ = fs::remove_file(&path);
     }

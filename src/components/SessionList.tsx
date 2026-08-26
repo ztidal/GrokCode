@@ -137,8 +137,8 @@ export function SessionList({
         )
       : sessions.slice();
 
-    // Pins outrank run state: a pin is the user's own ordering, and a card that
-    // sank the moment its agent went idle would not be worth pinning.
+    // Pins outrank run state, in pin-time order: a card that sank the moment
+    // its agent went idle would not be worth pinning.
     return sortPinnedFirst(list, pinnedIds, (a, b) => {
       const ar = rankManagedCard(
         managedStatuses?.[a.id],

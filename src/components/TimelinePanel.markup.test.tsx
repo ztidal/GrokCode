@@ -64,25 +64,23 @@ describe("timeline filter bar markup", () => {
   });
 
   it("gives the filter that is active on first paint a chip to measure", () => {
-    // The panel opens on `all`, and `syncFilterIndicator` returns without a
+    // The panel opens on `chat`. `syncFilterIndicator` returns without a
     // word when it cannot find the active chip: no `is-indicator-ready`, so the
-    // indicator stays invisible and nothing says why. `all` is the one chip
-    // that is not derived from the stream, so it is the one that can go missing
-    // without any item kind changing.
+    // indicator stays invisible and nothing says why.
     const html = renderPanel([item("a", "user")]);
 
-    const all = withClass(html, "timeline-filter-chip").find(
-      (chip) => chip.attrs["data-filter-kind"] === "all",
+    const chat = withClass(html, "timeline-filter-chip").find(
+      (chip) => chip.attrs["data-filter-kind"] === "chat",
     );
-    expect(all, "no `all` chip for the default filter").toBeDefined();
+    expect(chat, "no `chat` chip for the default filter").toBeDefined();
     // `.timeline-filter-chip.active` is what paints the selected chip.
-    expect(all!.classes).toContain("active");
+    expect(chat!.classes).toContain("active");
   });
 
-  it("leaves All without `is-filtered` and with `is-conversation`", () => {
+  it("opens on Chat with conversation chrome, so user bubbles sit on the right", () => {
     const html = renderPanel([item("a", "user"), item("b", "agent")]);
     const stream = withClass(html, "stream-timeline")[0]!;
-    expect(stream.classes).not.toContain("is-filtered");
+    expect(stream.classes).toContain("is-filtered");
     expect(stream.classes).toContain("is-conversation");
     expect(withClass(html, "kind-user")).toHaveLength(1);
     const chat = withClass(html, "timeline-filter-chip").find(
@@ -90,5 +88,6 @@ describe("timeline filter bar markup", () => {
     );
     expect(chat, "no Chat chip when user and agent are present").toBeDefined();
     expect(chat!.classes).toContain("filter-chat");
+    expect(chat!.classes).toContain("active");
   });
 });

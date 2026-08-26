@@ -42,9 +42,9 @@ export function parseIdSet(raw: string | null): Set<string> {
   }
 }
 
-/** Sorted, so one set has exactly one spelling. */
+/** Insertion order, which for pins is pin time. */
 export function serializeIdSet(ids: ReadonlySet<string>): string {
-  return JSON.stringify([...ids].sort());
+  return JSON.stringify([...ids]);
 }
 
 /** Add or drop one id, always a new set so React sees the change. */
