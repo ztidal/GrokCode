@@ -59,7 +59,7 @@ Host state lives in `~/.ztidalcode` (`%USERPROFILE%\.ztidalcode` on Windows), se
   <img src="docs/hero.webp" alt="ZtidalCode for Grok Build: several sessions in one window, a timeline that follows the reply, send while the agent is busy, paste files, Git beside the task." width="100%" />
 </p>
 
-<p align="center"><sub>The landing page screenshot. Name, mark, and a few host-side extras (pets, file drop) differ from upstream.</sub></p>
+<p align="center"><sub>The landing page screenshot. Name, mark, and a few host-side extras (file drop) differ from upstream.</sub></p>
 
 ## Features
 
@@ -83,7 +83,6 @@ The rest of the interface keeps those parallel workflows practical:
 | **Permissions** | Default (ask), Accept edits, Auto (classified by Grok), Always approve, Don't ask. Per-task prefs in `~/.ztidalcode/task_prefs.json`. Handles tool permission, file writes, plan approval, and ask-user questions; the task list surfaces **Needs input** when a reverse-request is open. |
 | **Updates** | Checks our own release feed once at startup — click the title-bar mark to check again — and installs an update in one click. Updates are minisign-verified against a key compiled into the build. |
 | **Attachments** | Paste from Explorer or drag files onto the composer. Each becomes a chip pointing at the file where it already lives. Screenshots paste into `%USERPROFILE%\.ztidalcode\pasted`. |
-| **Codex pet** | Optional always-on-top companion that plays a Codex pet atlas (`~/.codex/pets`) against the focused task: running, waiting for you, review, failed, idle. Toggle it in Settings. |
 
 ## Installation
 

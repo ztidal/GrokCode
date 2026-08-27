@@ -1,10 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  CodexPet,
-  PetPrefs,
-  PetPrefsPatch,
-} from "./pet/types";
-import type {
   ActiveSession,
   AvailableCommand,
   AttachRequest,
@@ -570,24 +565,6 @@ export async function savePastedImage(
  */
 export async function readImagePreview(path: string): Promise<string | null> {
   return invoke<string | null>("read_image_preview", { path });
-}
-
-/** Installed Codex pets under `${CODEX_HOME:-~/.codex}/pets`. */
-export async function listCodexPets(): Promise<CodexPet[]> {
-  return invoke<CodexPet[]>("list_codex_pets");
-}
-
-/** Spritesheet as a `data:` URL so the overlay never needs a filesystem scope. */
-export async function readPetSpritesheet(id: string): Promise<string> {
-  return invoke<string>("read_pet_spritesheet", { id });
-}
-
-export async function getPetPrefs(): Promise<PetPrefs> {
-  return invoke<PetPrefs>("get_pet_prefs");
-}
-
-export async function setPetPrefs(patch: PetPrefsPatch): Promise<PetPrefs> {
-  return invoke<PetPrefs>("set_pet_prefs", { patch });
 }
 
 /**

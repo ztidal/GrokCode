@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { openNewWindow } from "../api";
-import { PetSettings } from "../pet/PetSettings";
 import { ThemeToggle } from "./ThemeToggle";
 
 type DesktopSettingsOpenSetter = (open: boolean) => void;
@@ -120,8 +119,6 @@ export function DesktopSettingsPanel({
       </button>
       <div className="desktop-settings-separator" aria-hidden />
       <ThemeToggle />
-      <div className="desktop-settings-separator" aria-hidden />
-      <PetSettings />
       <div className="desktop-settings-separator" aria-hidden />
       <div className="desktop-settings-version">
         <span>Current version</span>

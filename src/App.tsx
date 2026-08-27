@@ -41,7 +41,6 @@ import { useTimelineHistory } from "./hooks/useTimelineHistory";
 import { useUsageMetrics } from "./hooks/useUsageMetrics";
 import { useLeftRailWidth } from "./hooks/useLeftRailWidth";
 import { useWorkspaceWidth } from "./hooks/useWorkspaceWidth";
-import { usePetActivityBridge } from "./pet/usePetActivityBridge";
 import type {
   MainTab,
   ManagedAgentInfo,
@@ -204,14 +203,6 @@ function App() {
     liveOwnsTail,
   );
   const pendingPrompts = usePendingPrompts();
-  const selectedSession = sessions.find((session) => session.id === selectedId);
-  usePetActivityBridge({
-    managed: managedForSession,
-    timelineItems,
-    sessionIsActive: Boolean(selectedSession?.isActive),
-    sessionTitle: selectedSession?.title ?? null,
-    pendingPermissions: permissionsForSession,
-  });
 
   // A prompt that failed on the wire resolves `promptAgent` happily — the Rust
   // side answers `accepted: true` as soon as it has handed the text to a worker

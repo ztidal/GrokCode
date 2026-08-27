@@ -13,7 +13,6 @@ mod json_util;
 mod models;
 mod multi_instance;
 mod permission_policy;
-mod pets;
 mod plan_approval;
 mod plan_file_policy;
 mod project_fs;
@@ -797,9 +796,6 @@ pub fn run() {
                     .unwrap_or_else(|| app.package_info().name.clone());
                 let version = app.package_info().version.to_string();
                 let _ = window.set_title(&format!("{name} {version}"));
-                // The pet overlay is a second window in this process. Closing
-                // only `main` leaves that window up, so the process never
-                // exits and the next click on Close looks like a no-op.
                 let handle = app.handle().clone();
                 window.on_window_event(move |event| match event {
                     tauri::WindowEvent::CloseRequested { .. } => handle.exit(0),
@@ -815,9 +811,6 @@ pub fn run() {
             manager.set_app(app.handle().clone());
             // Disk-driven session index: FS events + debounce (no fixed 4s poll).
             watcher::start(app.handle().clone());
-            if let Err(error) = pets::sync_window(app.handle()) {
-                tracing::warn!("pet overlay: {error}");
-            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -894,10 +887,6 @@ pub fn run() {
             list_session_flags,
             set_session_flag,
             merge_session_flags,
-            pets::list_codex_pets,
-            pets::read_pet_spritesheet,
-            pets::get_pet_prefs,
-            pets::set_pet_prefs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
