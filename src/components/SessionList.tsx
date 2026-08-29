@@ -73,8 +73,6 @@ interface Props {
   onNewTask?: () => void;
   /** Same modal as `onNewTask`, seeded with one project's path. */
   onNewTaskInProject?: (cwd: string) => void;
-  hasMore?: boolean;
-  onLoadMore?: () => void;
   /**
    * A task was moved to the trash and is no longer on disk.
    *
@@ -97,8 +95,6 @@ export function SessionList({
   needsInputSessionIds,
   onNewTask,
   onNewTaskInProject,
-  hasMore,
-  onLoadMore,
   onDeleted,
 }: Props) {
   const { pinnedIds, isPinned, togglePinned, unpin } = useSessionPins();
@@ -440,15 +436,6 @@ export function SessionList({
           />
         ) : (
           visible.map((s) => renderCard(s))
-        )}
-        {hasMore && onLoadMore && (
-          <button
-            className="btn ghost session-load-more"
-            type="button"
-            onClick={onLoadMore}
-          >
-            Load more
-          </button>
         )}
       </div>
 

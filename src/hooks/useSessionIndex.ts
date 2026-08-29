@@ -7,7 +7,6 @@ import {
 } from "../api";
 import type { SessionCard } from "../types";
 
-const PAGE_SIZE = 30;
 const TOKEN_USAGE_BATCH_SIZE = 8;
 
 interface Options {
@@ -39,7 +38,7 @@ function mergeUsageIntoList(
   });
 }
 
-/** Owns the paged/searchable task-card index and deferred token hydration. */
+/** Owns the searchable task-card index and deferred token hydration. */
 export function useSessionIndex({
   selectedId,
   onRecentLoaded,
@@ -48,8 +47,6 @@ export function useSessionIndex({
   const [recentSessions, setRecentSessions] = useState<SessionCard[]>([]);
   const [searchResults, setSearchResults] = useState<SessionCard[]>([]);
   const [query, setQuery] = useState("");
-  const [limit, setLimit] = useState(PAGE_SIZE);
-  const [hasMore, setHasMore] = useState(false);
   const sessions = query.trim() ? searchResults : recentSessions;
 
   const refreshList = useCallback(async () => {
@@ -57,34 +54,29 @@ export function useSessionIndex({
       return;
     }
     try {
-      const page = await listSessions(limit + 1);
-      const list = page.slice(0, limit);
-      setHasMore(page.length > limit);
+      const list = await listSessions();
       setRecentSessions(list);
       onError(null);
       await onRecentLoaded(list);
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
     }
-  }, [limit, onError, onRecentLoaded]);
+  }, [onError, onRecentLoaded]);
 
-  const refreshCard = useCallback(
-    async (id: string) => {
-      try {
-        const card = await getSessionCard(id);
-        setRecentSessions((previous) => {
-          if (!previous.some((item) => item.id === id)) {
-            return [card, ...previous].slice(0, limit);
-          }
-          return mergeCardIntoList(previous, card);
-        });
-        setSearchResults((previous) => mergeCardIntoList(previous, card));
-      } catch {
-        // A deleted or half-written task will be resolved by the next index refresh.
-      }
-    },
-    [limit],
-  );
+  const refreshCard = useCallback(async (id: string) => {
+    try {
+      const card = await getSessionCard(id);
+      setRecentSessions((previous) => {
+        if (!previous.some((item) => item.id === id)) {
+          return [card, ...previous];
+        }
+        return mergeCardIntoList(previous, card);
+      });
+      setSearchResults((previous) => mergeCardIntoList(previous, card));
+    } catch {
+      // A deleted or half-written task will be resolved by the next index refresh.
+    }
+  }, []);
 
   const mergeCard = useCallback((card: SessionCard) => {
     setRecentSessions((previous) => mergeCardIntoList(previous, card));
@@ -149,7 +141,5 @@ export function useSessionIndex({
     refreshList,
     refreshCard,
     mergeCard,
-    hasMore: !query.trim() && hasMore,
-    loadMore: () => setLimit((current) => current + PAGE_SIZE),
   };
 }

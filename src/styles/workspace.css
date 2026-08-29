@@ -863,12 +863,6 @@
   height: 0;
 }
 
-.session-load-more {
-  flex-shrink: 0;
-  align-self: center;
-  margin: 6px 0 2px;
-}
-
 /*
  * Task cards — Rosé Pine surfaces:
  *   border: Highlight Med · surface glass · hover: Highlight Low glass

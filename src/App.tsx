@@ -185,8 +185,6 @@ function App() {
     refreshList,
     refreshCard,
     mergeCard: mergeSessionCard,
-    hasMore: hasMoreSessions,
-    loadMore: loadMoreSessions,
   } = useSessionIndex({
     selectedId,
     onRecentLoaded: onRecentSessionsLoaded,
@@ -1148,8 +1146,6 @@ function App() {
             needsInputSessionIds={needsInputSessionIds}
             onNewTask={() => openNewTask()}
             onNewTaskInProject={openNewTask}
-            hasMore={hasMoreSessions}
-            onLoadMore={loadMoreSessions}
             onDeleted={(id) => {
               // The list is the authority on what is on disk, so re-read it
               // rather than splicing the card out here. Selection first: an
