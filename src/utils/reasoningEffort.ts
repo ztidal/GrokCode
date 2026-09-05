@@ -86,6 +86,19 @@ export function resolveReasoningOptions(
   return known ?? [];
 }
 
+/**
+ * Effort a new session should start on: Extra High when the menu lists it,
+ * otherwise the first rung (Grok's own default is High; we do not follow that).
+ */
+export function preferredNewSessionEffort(
+  options: ReasoningEffortOption[],
+): string | null {
+  if (options.length === 0) return null;
+  const extraHigh = options.find((option) => option.value.trim() === "xhigh");
+  if (extraHigh) return extraHigh.value;
+  return options[0]?.value.trim() || null;
+}
+
 export function selectedReasoningEffort(
   options: ReasoningEffortOption[],
   reasoningEffort?: string | null,
@@ -96,6 +109,11 @@ export function selectedReasoningEffort(
     const match = options.find((option) => option.value === selected);
     if (match) return match;
   }
-  return options.find((option) => option.default) ?? options[0] ?? null;
+  const preferred = preferredNewSessionEffort(options);
+  return (
+    options.find((option) => option.value === preferred) ??
+    options[0] ??
+    null
+  );
 }
 

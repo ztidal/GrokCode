@@ -1290,6 +1290,30 @@ impl AgentManager {
         Ok(pending)
     }
 
+    fn apply_new_session_effort(
+        client: &AcpClient,
+        session_id: &str,
+        info: &mut ManagedAgentInfo,
+    ) {
+        let Some(model_id) = info.model_id.clone() else {
+            return;
+        };
+        let Some(effort) =
+            models::default_new_session_effort(&info.available_models, Some(&model_id))
+        else {
+            return;
+        };
+        if info.reasoning_effort.as_deref() == Some(effort.as_str()) {
+            return;
+        }
+        match client.set_session_model(session_id, &model_id, Some(&effort)) {
+            Ok(_) => info.reasoning_effort = Some(effort),
+            Err(error) => {
+                tracing::warn!(error = %error, "new-session extra-high effort failed");
+            }
+        }
+    }
+
     pub fn spawn(&self, req: SpawnRequest) -> Result<ManagedAgentInfo, String> {
         let cwd = req.cwd.trim().to_string();
         if cwd.is_empty() || !Path::new(&cwd).is_dir() {
@@ -1362,6 +1386,9 @@ impl AgentManager {
         if let Some(models) = result.models.as_ref() {
             models::apply_models_info(&mut info, models);
         }
+        // Grok advertises High as the catalog default. New tasks start Extra High
+        // before any initial prompt so the first turn is not already on High.
+        Self::apply_new_session_effort(&client, &session_id, &mut info);
         info.status = ManagedStatus::Ready;
         if let Some(a) = self.inner.agents.lock().get_mut(&handle_id) {
             a.info = info.clone();

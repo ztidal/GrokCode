@@ -2,7 +2,10 @@ import { useCallback, useRef } from "react";
 import { setSessionModel } from "../api";
 import type { AvailableModelInfo, ManagedAgentInfo } from "../types";
 import { isLiveManagedStatus } from "../utils/managedStatus";
-import { resolveReasoningOptions } from "../utils/reasoningEffort";
+import {
+  preferredNewSessionEffort,
+  resolveReasoningOptions,
+} from "../utils/reasoningEffort";
 
 /** The agent state a session default is decided from. */
 type CatalogAgent = Pick<
@@ -44,20 +47,17 @@ export function newestAdvertisedModel(
 }
 
 /**
- * The model's best reasoning level, or `null` when it has none.
+ * Extra High when the model lists it, otherwise the first advertised rung.
  *
- * `resolveReasoningOptions` is the app's single ordering of the rungs (catalog
- * list when the agent sent one, the known-model fallback otherwise) and it is
- * ordered best-first, so the highest level is simply the head. The catalog's
- * own `default` flag is deliberately ignored: it marks the level the agent
- * considers sensible, and we are asking for the level it considers highest.
+ * Grok marks High as `default` in the catalog. New tasks still start on Extra
+ * High; the catalog flag is the agent's suggestion, not ours.
  */
 export function highestReasoningEffort(
   modelId: string,
   catalog: readonly AvailableModelInfo[] | null | undefined,
 ): string | null {
   const options = resolveReasoningOptions(modelId, [...(catalog ?? [])]);
-  return trimmed(options[0]?.value) || null;
+  return preferredNewSessionEffort(options);
 }
 
 /**

@@ -9,6 +9,27 @@ pub(crate) fn is_models_update_method(method: &str) -> bool {
     matches!(method.trim_start_matches('_'), "x.ai/models/update")
 }
 
+/// Effort a newly created session should start on: Extra High when listed.
+pub(crate) fn default_new_session_effort(
+    catalog: &[AvailableModelInfo],
+    model_id: Option<&str>,
+) -> Option<String> {
+    let id = nonempty(model_id)?;
+    let model = catalog.iter().find(|model| model.model_id == id)?;
+    if model
+        .reasoning_efforts
+        .iter()
+        .any(|option| option.value == "xhigh")
+    {
+        return Some("xhigh".into());
+    }
+    model
+        .reasoning_efforts
+        .first()
+        .map(|option| option.value.clone())
+        .filter(|value| !value.is_empty())
+}
+
 /// Advertised catalog default for `model_id`, if the entry lists one.
 pub(crate) fn advertised_effort_for(
     catalog: &[AvailableModelInfo],
@@ -141,7 +162,7 @@ fn parse_catalog(models: &SessionModelsInfo) -> Vec<AvailableModelInfo> {
 mod tests {
     use super::*;
     use crate::acp::protocol::AcpModelInfo;
-    use crate::agent_types::{ManagedStatus, PermissionMode};
+    use crate::agent_types::{ManagedStatus, PermissionMode, ReasoningEffortOption};
 
     fn sample_agent(model_id: &str, effort: Option<&str>) -> ManagedAgentInfo {
         ManagedAgentInfo {
@@ -286,5 +307,43 @@ mod tests {
         apply_models_info(&mut info, &grok_46_catalog("high"));
         assert_eq!(info.model_id.as_deref(), Some("grok-4.6"));
         assert_eq!(info.reasoning_effort.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn new_session_effort_is_extra_high_when_listed() {
+        let catalog = parse_catalog(&grok_46_catalog("high"));
+        assert_eq!(
+            default_new_session_effort(&catalog, Some("grok-4.6")).as_deref(),
+            Some("xhigh")
+        );
+    }
+
+    #[test]
+    fn new_session_effort_follows_the_list_when_xhigh_is_absent() {
+        let mut info = sample_agent("grok-4.5", None);
+        info.available_models = vec![AvailableModelInfo {
+            model_id: "grok-4.5".into(),
+            name: None,
+            supports_reasoning_effort: true,
+            reasoning_effort: Some("high".into()),
+            reasoning_efforts: vec![
+                ReasoningEffortOption {
+                    value: "high".into(),
+                    label: "High Effort".into(),
+                    description: None,
+                    default: true,
+                },
+                ReasoningEffortOption {
+                    value: "medium".into(),
+                    label: "Medium Effort".into(),
+                    description: None,
+                    default: false,
+                },
+            ],
+        }];
+        assert_eq!(
+            default_new_session_effort(&info.available_models, Some("grok-4.5")).as_deref(),
+            Some("high")
+        );
     }
 }

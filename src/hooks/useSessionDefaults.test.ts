@@ -55,13 +55,27 @@ describe("newestAdvertisedModel", () => {
 });
 
 describe("highestReasoningEffort", () => {
-  it("takes the head of the agent's own list, not its default", () => {
+  it("takes Extra High even when it is not first and High is the catalog default", () => {
     expect(
       highestReasoningEffort("grok-4.6", [
         model("grok-4.6", {
           supportsReasoningEffort: true,
           reasoningEffort: "high",
           reasoningEfforts: GROK_RUNGS,
+        }),
+      ]),
+    ).toBe("xhigh");
+    expect(
+      highestReasoningEffort("grok-4.6", [
+        model("grok-4.6", {
+          supportsReasoningEffort: true,
+          reasoningEffort: "high",
+          reasoningEfforts: [
+            { value: "high", label: "High Effort", default: true },
+            { value: "medium", label: "Medium Effort" },
+            { value: "xhigh", label: "Extra High Effort" },
+            { value: "low", label: "Low Effort" },
+          ],
         }),
       ]),
     ).toBe("xhigh");

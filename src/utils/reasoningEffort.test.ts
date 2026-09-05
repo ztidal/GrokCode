@@ -4,6 +4,7 @@ import {
   GROK_45_EFFORTS,
   GROK_46_EFFORTS,
   LEGACY_EFFORTS,
+  preferredNewSessionEffort,
   resolveReasoningOptions,
   selectedReasoningEffort,
 } from "./reasoningEffort";
@@ -64,11 +65,24 @@ describe("resolveReasoningOptions", () => {
   });
 });
 
+describe("preferredNewSessionEffort", () => {
+  it("picks Extra High even when Grok marked High as default", () => {
+    expect(preferredNewSessionEffort(GROK_46_EFFORTS)).toBe("xhigh");
+  });
+
+  it("falls back to the first rung when Extra High is not listed", () => {
+    expect(preferredNewSessionEffort(GROK_45_EFFORTS)).toBe("high");
+  });
+});
+
 describe("selectedReasoningEffort", () => {
-  it("prefers the session choice, then catalog default", () => {
+  it("prefers the session choice, then Extra High for a new task", () => {
     expect(selectedReasoningEffort(GROK_46_EFFORTS, "xhigh")?.value).toBe(
       "xhigh",
     );
-    expect(selectedReasoningEffort(GROK_46_EFFORTS, null)?.value).toBe("high");
+    expect(selectedReasoningEffort(GROK_46_EFFORTS, "medium")?.value).toBe(
+      "medium",
+    );
+    expect(selectedReasoningEffort(GROK_46_EFFORTS, null)?.value).toBe("xhigh");
   });
 });
