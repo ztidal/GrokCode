@@ -45,7 +45,8 @@ describe("MacosTitlebarBrand", () => {
       "macos-titlebar-subtitle",
       "macos-titlebar-version",
     ]);
-    expect(html).toContain("ZtidalCode for Grok Build");
+    expect(html).toContain("GrokCode");
+    expect(html).toContain("for Grok Build");
   });
 
   it("puts update checking and Settings on separate named buttons", () => {

@@ -1,10 +1,10 @@
-# ZtidalCode
+# GrokCode
 
 A fork of [`3xian/PinkCode`](https://github.com/3xian/PinkCode) — a Tauri 2 + React desktop GUI for xAI's
 Grok Build coding agent, driven over ACP (`grok agent stdio`) — hardened for team use and published under
-its own name, for Windows and macOS. `origin` is the public `ztidal/ZtidalCode`, whose default branch is
+its own name, for Windows and macOS. `origin` is the public `ztidal/GrokCode`, whose default branch is
 `hardening`; `upstream` is the original repository, merged from `upstream/main`. Releases are not cut
-here: installers and the update feed live in `ztidal/ZtidalCode-dist`.
+here: installers and the update feed live in `ztidal/GrokCode-dist`.
 
 Read `CONTEXT.md` for vocabulary and `docs/adr/` before changing anything about permissions, the fork's
 relationship to upstream, or naming. Several things that look like oversights are decisions.
@@ -22,7 +22,7 @@ Release bundles must be built through the identity overlay, or they carry upstre
 
 ```bash
 export TAURI_SIGNING_PRIVATE_KEY="$(cat /path/to/ztidalcode.key)"   # contents — Tauri ignores _PATH
-npm run tauri -- build --config branding/ztidalcode.json
+npm run tauri -- build --config branding/grokcode.json
 ```
 
 Releases go through `npm run release -- --help`: it builds from a clean detached worktree and
@@ -53,7 +53,7 @@ lets a deleted task leave the list.
 
 ### Issue tracker
 
-Bug reports and feature requests are GitHub Issues on `ztidal/ZtidalCode`. `.scratch/<slug>/` holds what
+Bug reports and feature requests are GitHub Issues on `ztidal/GrokCode`. `.scratch/<slug>/` holds what
 is not an issue — specs, measurements, parked investigations and hand-off notes — versioned next to the
 code they describe. See `docs/agents/issue-tracker.md` for which goes where.
 

@@ -1,9 +1,9 @@
-//! Layered ZtidalCode host configuration (log level + default permission mode).
+//! Layered GrokCode host configuration (log level + default permission mode).
 //!
 //! Priority for [`resolve`] (later wins):
 //! 1. Built-in defaults
 //! 2. Environment (`PINKCODE_*`) — seed when files omit a field; files override env
-//! 3. Global file `~/.ztidalcode/config.json`
+//! 3. Global file `~/.grokcode/config.json` (or legacy `~/.ztidalcode`)
 //!
 //! There is deliberately no project-level layer. Upstream reads
 //! `<cwd>/.pinkcode/config.json`, which lets a cloned repository choose the
@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, SystemTime};
 
 /// Permission mode a task starts in when nothing else has chosen one.
@@ -98,13 +98,24 @@ fn default_log_level() -> &'static str {
     }
 }
 
-/// `~/.ztidalcode` — host state for this build only. Upstream PinkCode uses
-/// `~/.pinkcode`; the two apps ship separate bundle identifiers and must not
-/// share a config file.
+/// `~/.grokcode` — host state for this build only. Upstream PinkCode uses
+/// `~/.pinkcode`. An existing `~/.ztidalcode` from the previous product name
+/// is kept so pins, titles and prefs survive the rename.
 pub fn app_home() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".ztidalcode")
+    static HOME: OnceLock<PathBuf> = OnceLock::new();
+    HOME.get_or_init(|| {
+        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        let current = home.join(".grokcode");
+        if current.exists() {
+            return current;
+        }
+        let legacy = home.join(".ztidalcode");
+        if legacy.exists() {
+            return legacy;
+        }
+        current
+    })
+    .clone()
 }
 
 pub fn global_config_path() -> PathBuf {
@@ -196,13 +207,13 @@ pub fn resolve() -> ResolvedConfig {
     match load_layer_file(&global_config_path()) {
         Ok(global) => merged.merge_from(&global),
         Err(error) => {
-            tracing::warn!(error = %error, "failed to load global ZtidalCode config");
+            tracing::warn!(error = %error, "failed to load global GrokCode config");
         }
     }
     finalize(merged)
 }
 
-/// `~/.ztidalcode/logs` — the second sink, and in an installed build the only
+/// `~/.grokcode/logs` — the second sink, and in an installed build the only
 /// one. `main.rs` sets `windows_subsystem = "windows"` for release, so the app
 /// a teammate launches from the Start Menu has no console behind stderr and
 /// every `warn!`/`error!` in the crate went nowhere.
@@ -215,8 +226,8 @@ const LOG_RETENTION: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 /// `app-<date>-<pid>.log`.
 ///
-/// Per process, not per day. Several ZtidalCode windows run as separate OS
-/// processes over one `~/.ztidalcode` (see [`crate::multi_instance`]), and the
+/// Per process, not per day. Several GrokCode windows run as separate OS
+/// processes over one `~/.grokcode` (see [`crate::multi_instance`]), and the
 /// usual daily rollover works by renaming the current file — which on Windows
 /// fails while another process holds it open, and fails *inside the writer*,
 /// where nobody is watching. The pid means no two windows ever share a file.
@@ -259,7 +270,7 @@ fn prune_old_logs(dir: &Path, cutoff: SystemTime) {
 fn prepare_log_file() -> Option<PathBuf> {
     let dir = app_home().join(LOG_DIR);
     if let Err(error) = fs::create_dir_all(&dir) {
-        eprintln!("[ztidalcode] no log file ({}): {error}", dir.display());
+        eprintln!("[grokcode] no log file ({}): {error}", dir.display());
         return None;
     }
     if let Some(cutoff) = SystemTime::now().checked_sub(LOG_RETENTION) {
@@ -398,7 +409,7 @@ pub fn init_tracing() {
 
     if let Err(error) = result {
         // Already initialized (tests / double run) — not fatal.
-        eprintln!("[ztidalcode] tracing init skipped: {error}");
+        eprintln!("[grokcode] tracing init skipped: {error}");
     } else {
         if let Some(path) = log_file {
             install_panic_hook(path.clone());
@@ -407,7 +418,7 @@ pub fn init_tracing() {
         tracing::info!(
             log_level = %cfg.log_level,
             default_permission = ?cfg.default_permission_mode,
-            "ZtidalCode config resolved"
+            "GrokCode config resolved"
         );
     }
 }
@@ -484,7 +495,7 @@ mod tests {
     #[test]
     fn repository_config_is_not_a_layer() {
         let dir = temp_dir();
-        for name in [".pinkcode", ".ztidalcode"] {
+        for name in [".pinkcode", ".ztidalcode", ".grokcode"] {
             let planted = dir.join(name).join("config.json");
             write_layer(
                 &planted,
@@ -507,7 +518,7 @@ mod tests {
 
     #[test]
     fn merge_then_finalize_later_layer_wins() {
-        // Isolated pure merge — no real ~/.ztidalcode or process env.
+        // Isolated pure merge — no real ~/.grokcode or process env.
         let mut merged = defaults_layer();
         merged.merge_from(&ConfigLayer {
             log_level: Some("trace".into()),
@@ -589,7 +600,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    /// Two windows are two OS processes over one `~/.ztidalcode`; a shared file
+    /// Two windows are two OS processes over one `~/.grokcode`; a shared file
     /// name is what would make one of them the writer that silently stops.
     #[test]
     fn each_window_writes_to_a_file_of_its_own() {

@@ -1,4 +1,4 @@
-# ZtidalCode
+# GrokCode
 
 A desktop GUI that drives xAI's Grok Build coding agent over ACP, hardened for team use and published
 under its own name. It is a public fork of upstream PinkCode, not a separate product.
@@ -7,10 +7,10 @@ under its own name. It is a public fork of upstream PinkCode, not a separate pro
 
 ### The fork
 
-**ZtidalCode**:
+**GrokCode**:
 The name this fork ships under. Package identity only — the ACP client identity we present to Grok Build
 remains upstream's, because changing it would change wire behaviour for no benefit.
-_Avoid_: Our PinkCode, the hardened PinkCode, the ztidal build
+_Avoid_: Our PinkCode, the hardened PinkCode, ZtidalCode (the previous product name)
 
 **Hardening Layer**:
 What this fork is: a deliberately thin set of changes on top of upstream that make the app safe for team

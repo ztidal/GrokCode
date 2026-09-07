@@ -23,7 +23,7 @@ export interface SessionArchiveApi {
  * with no way back would make archiving as frightening as deleting, which is
  * exactly the distinction this pair exists to draw.
  *
- * Host-side, in the pins' document (`~/.ztidalcode/session_flags.json`), and
+ * Host-side, in the pins' document (`~/.grokcode/session_flags.json`), and
  * for the same reasons as the pins — see `useSessionPins`.
  */
 export function useSessionArchive(): SessionArchiveApi {

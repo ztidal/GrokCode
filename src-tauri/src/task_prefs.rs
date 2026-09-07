@@ -1,10 +1,10 @@
 //! Per-task (Grok session) preferences persisted by PinkCode.
 //!
-//! Stored under `~/.ztidalcode/task_prefs.json` so permission mode and Plan
+//! Stored under `~/.grokcode/task_prefs.json` so permission mode and Plan
 //! arming survive restarts and re-attach, independent of Grok's own session files.
 //! This is the **session** layer of the layered config stack (see `config`).
 //!
-//! Several ZtidalCode windows are several OS processes sharing this one file
+//! Several GrokCode windows are several OS processes sharing this one file
 //! (see `multi_instance`), and every setter rewrites the whole document. Reads
 //! come from a cache that revalidates against the file's stamp; writes take the
 //! cross-process lock and re-read inside it, so a sibling window's edit is

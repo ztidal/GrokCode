@@ -32,7 +32,7 @@ spawns `grok agent --always-approve stdio`: the agent stops raising permission r
 still arrive are answered `Allow` by the host gate. Edits land and commands run without a prompt.
 
 It is a Seed, not a ceiling. Config is the weakest layer in the stack, so `PINKCODE_DEFAULT_PERMISSION_MODE`,
-`~/.ztidalcode/config.json` and the task's own Mode selector each override it. A machine or
+`~/.grokcode/config.json` and the task's own Mode selector each override it. A machine or
 a person who wants the old posture back sets the env var or the global file to `ask`; a single task steps
 down in the New Task modal, which opens with **Always approve** visibly pre-selected rather than applying it
 silently.
@@ -68,7 +68,7 @@ Two things in the old list no longer bite, and pretending otherwise would be dis
   tool call the agent was talked into by content it read. Choosing the folder in the New Task modal, and
   choosing a narrower Mode there, are what is left of that — the prompt used to do the catching and does
   not any more. A team that wants it back does not need a code change: `PINKCODE_DEFAULT_PERMISSION_MODE=ask`
-  or `{"defaultPermissionMode":"default"}` in `~/.ztidalcode/config.json` restores the old behaviour, per
+  or `{"defaultPermissionMode":"default"}` in `~/.grokcode/config.json` restores the old behaviour, per
   machine, without touching this fork.
 
 If the team ever does want to restrict modes, add the build-time allowlist then — it is a small patch at

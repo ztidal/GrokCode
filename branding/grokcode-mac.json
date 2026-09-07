@@ -3,7 +3,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/ztidal/ZtidalCode-dist/releases/latest/download/latest-mac.json"
+        "https://github.com/ztidal/GrokCode-dist/releases/latest/download/latest-mac.json"
       ]
     }
   }

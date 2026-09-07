@@ -55,7 +55,7 @@ export interface SessionPinsApi {
  * list and the project groups, and a card cannot be pinned in one view while
  * looking unpinned in another.
  *
- * The set lives host-side (`~/.ztidalcode/session_flags.json`), in the
+ * The set lives host-side (`~/.grokcode/session_flags.json`), in the
  * document it shares with the archive. It started in localStorage as a
  * "per-machine preference", but that argument answered cross-machine sync,
  * not same-machine durability: localStorage batches its writes, so a killed

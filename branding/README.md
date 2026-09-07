@@ -1,13 +1,13 @@
 # Build-time identity overlay
 
-`ztidalcode.json` is merged over `src-tauri/tauri.conf.json` at build time:
+`grokcode.json` is merged over `src-tauri/tauri.conf.json` at build time:
 
 ```bash
-npm run tauri -- build --config branding/ztidalcode.json
+npm run tauri -- build --config branding/grokcode.json
 ```
 
 Everything that distinguishes our build from upstream's — product name, the shipped executable
-(`ZtidalCode.exe` / the Mac binary), bundle identifier, and the updater's trust anchor and feed —
+(`GrokCode.exe` / the Mac binary), bundle identifier, and the updater's trust anchor and feed —
 lives here rather than in `src-tauri/tauri.conf.json`. `mainBinaryName` must stay in lockstep with
 the `[[bin]]` name in `src-tauri/Cargo.toml`; Tauri will not find the binary if they disagree.
 
@@ -44,7 +44,7 @@ private key".
 ```bash
 export TAURI_SIGNING_PRIVATE_KEY="$(cat /path/to/ztidalcode.key)"
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
-npm run tauri -- build --config branding/ztidalcode.json
+npm run tauri -- build --config branding/grokcode.json
 ```
 
 Because our installers carry no Authenticode signature, this minisign key is the only integrity guarantee
@@ -73,15 +73,15 @@ hand once. That is the trade to weigh when deciding, not a thing to do casually.
 
 ## Where releases go
 
-Source lives in `ztidal/ZtidalCode`. Installers, their `.sig` files, the feeds (`latest.json`,
-`latest-mac.json`) and the checksum lists go to `ztidal/ZtidalCode-dist`, and the source repository
+Source lives in `ztidal/GrokCode`. Installers, their `.sig` files, the feeds (`latest.json`,
+`latest-mac.json`) and the checksum lists go to `ztidal/GrokCode-dist`, and the source repository
 carries no releases at all.
 
 The split was forced while the source was still private — the updater fetches anonymously, and an
 anonymous client cannot read release assets there — and it is kept now that the source is public for a
 reason that does not go away: a release is a thing you publish, not a branch you push. `latest.json` and
 `SHA256SUMS.txt` are generated into this tree per release and gitignored, so a feed never travels with the
-source; and the updater endpoint in `ztidalcode.json` is a URL every installed client already carries, so
+source; and the updater endpoint in `grokcode.json` is a URL every installed client already carries, so
 where releases live is not free to move (see `.scratch/rename/findings.md`).
 
 Build the feed with `npm run updater:json`; it verifies every signature against the bundle bytes before
@@ -98,7 +98,7 @@ silently — nothing fails, the words are just wrong. So a release also means:
   file size come from the releases API at load, so a plain version bump needs nothing here. The hero
   is a picture (`docs/hero.webp`) and can go stale: replace it when the look changes noticeably, or
   when a claim printed on it stops being true. Published from `main` under `/docs`:
-  [ztidal.github.io/ZtidalCode-dist](https://ztidal.github.io/ZtidalCode-dist/).
+  [ztidal.github.io/GrokCode-dist](https://ztidal.github.io/GrokCode-dist/).
 
 ## Publishing a release
 
@@ -106,7 +106,7 @@ Build through the overlay, then generate the feed from the bundles that build pr
 
 ```bash
 npm run updater:json -- --notes "what changed in this release"
-gh release create v0.0.9 --repo ztidal/ZtidalCode-dist \
+gh release create v0.0.9 --repo ztidal/GrokCode-dist \
   latest.json \
   src-tauri/target/release/bundle/nsis/*-setup.exe* \
   src-tauri/target/release/bundle/msi/*.msi*
@@ -124,7 +124,7 @@ never from a branch head, because the feed claims a version and the build must b
 It applies a second overlay after the first so its updater reads a feed of its own:
 
 ```bash
-npm run tauri -- build --config branding/ztidalcode.json --config branding/ztidalcode-mac.json \
+npm run tauri -- build --config branding/grokcode.json --config branding/grokcode-mac.json \
   --target universal-apple-darwin
 node scripts/make-updater-json.mjs --platform macos --arch universal --notes-file NOTES.md \
   --bundle-dir src-tauri/target/universal-apple-darwin/release/bundle
@@ -145,7 +145,7 @@ installer ask for different keys.
 
 A feed carrying only the generic key hands an MSI-installed client the NSIS installer. That installs
 cleanly — the NSIS installer removes the MSI install first — but it moves the app from
-`%LOCALAPPDATA%\Programs\ZtidalCode` to `%LOCALAPPDATA%\ZtidalCode`, which leaves whatever the user pinned
+`%LOCALAPPDATA%\Programs\GrokCode` to `%LOCALAPPDATA%\GrokCode`, which leaves whatever the user pinned
 to their taskbar pointing at nothing. The generic key stays in the feed as the fallback for a client whose
 installer kind cannot be determined; NSIS is the right answer there because it needs no administrator.
 

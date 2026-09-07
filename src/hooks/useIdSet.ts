@@ -10,7 +10,7 @@ import type { SessionFlag, SessionFlagsState } from "../api";
  * the same, so the two cannot drift on how a load, a toggle, or the one-time
  * migration is spelled.
  *
- * The sets live host-side (`~/.ztidalcode/session_flags.json`), moved out of
+ * The sets live host-side (`~/.grokcode/session_flags.json`), moved out of
  * localStorage the way the titles were and for the same reason: that store is
  * a write-behind cache, so a killed window loses its last batched writes, and
  * each window holds the whole set and overwrites the others' — a real path

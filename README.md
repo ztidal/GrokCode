@@ -1,9 +1,9 @@
 <!-- Relative path so GitHub does not rewrite via camo (often broken in CN). -->
 <p align="center">
-  <img src="docs/logo.png" alt="ZtidalCode" width="128" />
+  <img src="docs/logo.png" alt="GrokCode" width="128" />
 </p>
 
-<h1 align="center">ZtidalCode — Grok Desktop GUI</h1>
+<h1 align="center">GrokCode — Grok Desktop GUI</h1>
 
 <p align="center">
   <strong>A public fork of PinkCode: same workspace, hardened for team use.</strong>
@@ -24,7 +24,7 @@
 </p>
 
 Run multiple [Grok Build](https://x.ai/cli) tasks side by side, follow every task in a readable live
-timeline, and see where your credits and tokens go. ZtidalCode turns Grok Build's CLI workflow into a
+timeline, and see where your credits and tokens go. GrokCode turns Grok Build's CLI workflow into a
 visual desktop workspace while keeping `grok` itself in charge: it connects over
 [ACP](https://spec.acp.dev) (Agent Client Protocol) via stdio and does not run a separate agent loop.
 
@@ -43,20 +43,20 @@ own name. See [ADR-0001](docs/adr/0001-track-upstream-as-a-thin-hardening-layer.
 | **Shell calls are never auto-approved on plan.md path text.** | A command merely *containing* the session plan path was auto-approved in every mode, `Don't ask` included. |
 | **`auth.json` is replaced atomically and stays owner-only.** | The highest-consequence write in the app was the one skipping the project's own atomic-write helper. |
 | **The mode chip names the real mode.** `Accept edits` and `Don't ask` used to display as "Ask before tools". | The indicator was wrong exactly where it mattered most. |
-| **Own identity, own update feed.** Product name, bundle identifier, version line and updater key live in `branding/ztidalcode.json`. | So our build is a separate application, and cannot be replaced by an upstream release. |
+| **Own identity, own update feed.** Product name, bundle identifier, version line and updater key live in `branding/grokcode.json`. | So our build is a separate application, and cannot be replaced by an upstream release. |
 
 Deliberately **not** changed: there is no permission allowlist or managed policy — every mode is open to
 everyone ([ADR-0002](docs/adr/0002-no-permission-policy-layer.md)) — and the identity we present to Grok
 Build on the wire is still upstream's ([ADR-0003](docs/adr/0003-rename-the-package-not-the-protocol.md)).
 Both look like oversights and are not.
 
-Host state lives in `~/.ztidalcode` (`%USERPROFILE%\.ztidalcode` on Windows), separate from upstream's
+Host state lives in `~/.grokcode` (`%USERPROFILE%\.grokcode` on Windows), separate from upstream's
 `~/.pinkcode`, so both apps can be installed side by side.
 
 ## Screenshot
 
 <p align="center">
-  <img src="docs/hero.webp" alt="ZtidalCode for Grok Build: several sessions in one window, a timeline that follows the reply, send while the agent is busy, paste files, Git beside the task." width="100%" />
+  <img src="docs/hero.webp" alt="GrokCode for Grok Build: several sessions in one window, a timeline that follows the reply, send while the agent is busy, paste files, Git beside the task." width="100%" />
 </p>
 
 <p align="center"><sub>The landing page screenshot. Name, mark, and a few host-side extras (file drop) differ from upstream.</sub></p>
@@ -80,15 +80,15 @@ The rest of the interface keeps those parallel workflows practical:
 | **Workspace & Git** | Browse the project tree, preview text and images, and manage Git: branch status (ahead/behind), staged/unstaged lists, inline file diffs, **per-hunk stage/unstage**, and commit. |
 | **Modes & plans** | Shift+Tab-style cycle aligned with Grok Build: **Normal → Plan → Auto → Always-approve**. Plan is orthogonal to permission mode; free-text send becomes `/plan …`. When the agent exits plan mode, review and choose Approve, Request changes, or Quit. |
 | **Model** | Switch the session model mid-task over ACP `session/set_model`. |
-| **Permissions** | Default (ask), Accept edits, Auto (classified by Grok), Always approve, Don't ask. Per-task prefs in `~/.ztidalcode/task_prefs.json`. Handles tool permission, file writes, plan approval, and ask-user questions; the task list surfaces **Needs input** when a reverse-request is open. |
+| **Permissions** | Default (ask), Accept edits, Auto (classified by Grok), Always approve, Don't ask. Per-task prefs in `~/.grokcode/task_prefs.json`. Handles tool permission, file writes, plan approval, and ask-user questions; the task list surfaces **Needs input** when a reverse-request is open. |
 | **Updates** | Checks our own release feed once at startup — click the title-bar mark to check again — and installs an update in one click. Updates are minisign-verified against a key compiled into the build. |
-| **Attachments** | Paste from Explorer or drag files onto the composer. Each becomes a chip pointing at the file where it already lives. Screenshots paste into `%USERPROFILE%\.ztidalcode\pasted`. |
+| **Attachments** | Paste from Explorer or drag files onto the composer. Each becomes a chip pointing at the file where it already lives. Screenshots paste into `%USERPROFILE%\.grokcode\pasted`. |
 
 ## Installation
 
 ### 1. Install Grok Build
 
-ZtidalCode requires the [Grok Build CLI](https://x.ai/cli) and a SuperGrok, X Premium+, or SuperGrok Heavy
+GrokCode requires the [Grok Build CLI](https://x.ai/cli) and a SuperGrok, X Premium+, or SuperGrok Heavy
 subscription. The app never handles your credentials — it reuses the session `grok login` creates.
 
 **Windows (PowerShell):**
@@ -106,19 +106,20 @@ curl -fsSL https://x.ai/cli/install.sh | bash
 Grok stores its data under `~/.grok` (`%USERPROFILE%\.grok` on Windows). Set `GROK_HOME` for another
 location.
 
-### 2. Install ZtidalCode
+### 2. Install GrokCode
 
-Download from **[ZtidalCode-dist releases](https://github.com/ztidal/ZtidalCode-dist/releases)**.
+Download from **[GrokCode-dist releases](https://github.com/ztidal/GrokCode-dist/releases)**.
 Releases live in that repository, not this one: the installers and the update feed are kept apart from
 the source they were built from, and this repository never carries a release of its own.
 
-- **Windows x64 — take `ZtidalCode_<version>_x64-setup.exe`.** It installs per-user as
-  `ZtidalCode.exe`, needs no administrator, and in-app updates then install silently and relaunch
-  the app.
+- **Windows x64 — take `GrokCode_<version>_x64-setup.exe`.** It installs per-user as
+  `GrokCode.exe`, needs no administrator, and in-app updates then install silently and relaunch
+  the app. If **ZtidalCode** is still installed, uninstall it — this is a new folder, not an
+  in-place rename.
 - Windows x64, administrator-driven rollout: the MSI. It installs per-machine, so **every in-app update
   prompts for administrator** — see
   [which installer to hand people](branding/README.md#which-installer-to-hand-people).
-- **macOS — `ZtidalCode_<version>_universal.dmg`.** One universal build for Apple Silicon and Intel; it
+- **macOS — `GrokCode_<version>_universal.dmg`.** One universal build for Apple Silicon and Intel; it
   updates itself from then on. The macOS half is built on a Mac and uploaded to the same release after
   the Windows half, so a fresh release may carry only the Windows files for a while.
 - Linux: build from source.
@@ -134,13 +135,13 @@ the source they were built from, and this repository never carries a release of 
 
 The day-to-day guide — project grouping, pins, the composer, permission modes, slash commands and the
 keyboard table — lives with the downloads, where a new user lands:
-**[ZtidalCode-dist README](https://github.com/ztidal/ZtidalCode-dist#using-it)**.
+**[GrokCode-dist README](https://github.com/ztidal/GrokCode-dist#using-it)**.
 
 It is kept there rather than duplicated here so there is one copy to keep true. Two things from it are
 worth repeating for anyone changing this code:
 
 - **A new task approves tool calls without asking.** `PINKCODE_DEFAULT_PERMISSION_MODE=ask`, or
-  `{"defaultPermissionMode":"default"}` in `~/.ztidalcode/config.json`, restores the prompt without a
+  `{"defaultPermissionMode":"default"}` in `~/.grokcode/config.json`, restores the prompt without a
   rebuild. See [ADR-0002](docs/adr/0002-no-permission-policy-layer.md).
 - **`Enter` sends and `Ctrl+Enter` inserts a newline**, which is the reverse of most chat apps.
 
@@ -148,10 +149,10 @@ worth repeating for anyone changing this code:
 
 **Ask for this file first when someone says it stopped working.** An installed build is a windowed
 process with no console, so anything it writes to stderr is lost; it also appends to
-`~/.ztidalcode/logs/app-<date>-<pid>.log` (`%USERPROFILE%\.ztidalcode\logs\` on Windows). One file per
+`~/.grokcode/logs/app-<date>-<pid>.log` (`%USERPROFILE%\.grokcode\logs\` on Windows). One file per
 process — each window is a separate one — and panics land there with a backtrace. Files are removed
 seven days after their last write, at startup. `PINKCODE_LOG_LEVEL=debug`, or
-`{"logLevel":"debug"}` in `~/.ztidalcode/config.json`, raises the level for the next launch.
+`{"logLevel":"debug"}` in `~/.grokcode/config.json`, raises the level for the next launch.
 
 ## Development
 
@@ -187,7 +188,7 @@ Release bundles **must** go through the identity overlay, or they ship under ups
 ```bash
 export TAURI_SIGNING_PRIVATE_KEY="$(cat /path/to/ztidalcode.key)"
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
-npm run tauri -- build --config branding/ztidalcode.json
+npm run tauri -- build --config branding/grokcode.json
 ```
 
 See [`branding/README.md`](branding/README.md) for the signing key, the version scheme, and the Windows
@@ -225,7 +226,7 @@ UI (React 19 + TypeScript)
         |-- Billing — HTTP calls to Grok billing API (OIDC auth via ~/.grok/auth.json)
 ```
 
-ZtidalCode communicates with Grok Build over ACP (JSON-RPC over stdio): prompts, `session/set_mode`,
+GrokCode communicates with Grok Build over ACP (JSON-RPC over stdio): prompts, `session/set_mode`,
 `session/set_model`, usage/recap extensions, and lifecycle notifications. The host-side permission gate
 intercepts reverse RPCs (`session/request_permission`, `fs/write_text_file`, `x.ai/exit_plan_mode`,
 `x.ai/ask_user_question`) and applies the configured policy before allowing or denying agent actions.

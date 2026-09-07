@@ -614,12 +614,12 @@ async fn git_apply_patch(cwd: String, patch: String, reverse: bool) -> Result<()
         .map_err(|e| format!("git apply patch task failed: {e}"))?
 }
 
-/// Open another ZtidalCode window for a second project.
+/// Open another GrokCode window for a second project.
 ///
 /// A new OS process, not a `WebviewWindow`: `capabilities/default.json` binds
 /// every permission to the window label `main`, so an in-process sibling would
 /// paint and then fail every IPC call it made. The two processes share
-/// `~/.ztidalcode`, which `multi_instance` locks (see `task_prefs`).
+/// `~/.grokcode`, which `multi_instance` locks (see `task_prefs`).
 ///
 /// `session` opens the new window straight onto one task; without it the window
 /// comes up wherever the sidebar would have left it.

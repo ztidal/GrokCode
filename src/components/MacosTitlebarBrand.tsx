@@ -129,7 +129,7 @@ export function MacosTitlebarBrand({
     <div
       className="macos-titlebar"
       role="banner"
-      aria-label={version ? `ZtidalCode v${version}` : "ZtidalCode"}
+      aria-label={version ? `GrokCode v${version}` : "GrokCode"}
     >
       {/* Native traffic lights sit here; keep clear + draggable */}
       <div className="macos-titlebar-traffic" data-tauri-drag-region />
@@ -156,10 +156,10 @@ export function MacosTitlebarBrand({
           />
           <div className="macos-titlebar-copy">
             <span className="macos-titlebar-name text-title-gradient">
-              ZtidalCode
+              GrokCode
             </span>
             <span className="macos-titlebar-subtitle">
-              ZtidalCode for Grok Build
+              for Grok Build
             </span>
             {statusLine ? (
               <span className="macos-titlebar-version">{statusLine}</span>

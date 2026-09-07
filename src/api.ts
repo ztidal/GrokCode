@@ -510,7 +510,7 @@ export async function listProjectGroupSessions(
 }
 
 /**
- * Open another ZtidalCode window, for a second project alongside this one.
+ * Open another GrokCode window, for a second project alongside this one.
  *
  * The host launches a separate OS process rather than a `WebviewWindow`: the
  * app's capabilities are scoped to the window label `main`, so an in-process

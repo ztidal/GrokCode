@@ -35,7 +35,7 @@ export interface SessionTitlesApi {
  * session on disk is `grok`'s (ADR-0001), and the title it generates keeps
  * updating underneath whatever we show. Clearing the name brings it back.
  *
- * The names live host-side (`~/.ztidalcode/session_titles.json`), unlike the
+ * The names live host-side (`~/.grokcode/session_titles.json`), unlike the
  * pins beside them. A pin is a preference — cheap to lose, cheaper to redo — so
  * localStorage is the right size for it. A name is something someone typed, and
  * localStorage is a cache: it batches to disk, so a window that is killed

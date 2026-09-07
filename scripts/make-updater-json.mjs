@@ -6,21 +6,21 @@
  * bundler stamps it into each binary (`__TAURI_BUNDLE_TYPE_VAR_MSI` / `..._NSS`), so an
  * MSI-installed client and an NSIS-installed one ask for different keys. A feed carrying only the
  * generic key hands the MSI client the NSIS installer: it installs cleanly, but it relocates the
- * app from `%LOCALAPPDATA%\Programs\ZtidalCode` to `%LOCALAPPDATA%\ZtidalCode`, which orphans
+ * app from `%LOCALAPPDATA%\Programs\GrokCode` to `%LOCALAPPDATA%\GrokCode`, which orphans
  * whatever the user pinned to their taskbar.
  *
  * Every signature is verified against the bundle bytes before being written, so the feed cannot
  * ship a signature from a different build than the artifact it points at — the one failure that
  * looks perfectly healthy from the outside and breaks every client at install time.
  *
- * That check cannot tell a build made through `branding/ztidalcode.json` from one made without it:
+ * That check cannot tell a build made through `branding/grokcode.json` from one made without it:
  * the signing key comes from the environment, so both are correctly signed. Only the compiled-in
  * updater identity differs, and a build without the overlay carries upstream's trust anchor and
  * upstream's feed — it installs, runs and looks healthy, and then every client that installs it
  * walks itself onto upstream's next release. So the binary is checked for our pubkey first.
  *
  * Two platforms, two feed files. Windows writes `latest.json`; macOS writes `latest-mac.json`,
- * and the macOS build points its updater at that name through `branding/ztidalcode-mac.json`.
+ * and the macOS build points its updater at that name through `branding/grokcode-mac.json`.
  * Two machines publishing into one release must never write the same file — a merged feed
  * would be owned by whichever side uploaded last, and a bad merge stops every client updating.
  *
@@ -64,13 +64,13 @@ function die(message) {
 // --- identity: version, trust anchor and feed all come from the branding overlay ------------
 
 const branding = JSON.parse(
-  readFileSync(join(repoRoot, "branding", "ztidalcode.json"), "utf8"),
+  readFileSync(join(repoRoot, "branding", "grokcode.json"), "utf8"),
 );
 const version = branding.version;
 const pubkeyB64 = branding.plugins?.updater?.pubkey;
 const endpoint = branding.plugins?.updater?.endpoints?.[0];
 if (!version || !pubkeyB64 || !endpoint) {
-  die("branding/ztidalcode.json is missing version, updater.pubkey or updater.endpoints[0]");
+  die("branding/grokcode.json is missing version, updater.pubkey or updater.endpoints[0]");
 }
 
 // https://github.com/<owner>/<repo>/releases/latest/download/latest.json
@@ -153,7 +153,7 @@ const baseConf = JSON.parse(readFileSync(join(repoRoot, "src-tauri", "tauri.conf
 // overlay is merged over the base config, so either file can be the one that supplies either key.
 const binaryName =
   branding.mainBinaryName ?? baseConf.mainBinaryName ?? branding.productName ?? baseConf.productName;
-if (!binaryName) die("neither branding/ztidalcode.json nor src-tauri/tauri.conf.json names the binary");
+if (!binaryName) die("neither branding/grokcode.json nor src-tauri/tauri.conf.json names the binary");
 const productName = branding.productName ?? baseConf.productName ?? binaryName;
 
 // Every bundle wraps this one file, and every bundle compresses it, so the binary itself is the
@@ -174,7 +174,7 @@ const carries = (key) => binaryBytes.includes(Buffer.from(key, "utf8"));
 if (!carries(pubkeyB64)) {
   die(
     `${basename(binary)} does not carry our updater key — it was built without ` +
-      "--config branding/ztidalcode.json; rebuild and re-bundle before publishing",
+      "--config branding/grokcode.json; rebuild and re-bundle before publishing",
   );
 }
 // Read out of the base config rather than pinned here, so this still names the right key after an

@@ -25,8 +25,8 @@ const worktree = resolve(repoRoot, "..", "ztidal-release-wt");
 // is why every artifact path below lives under the main repo, not under the worktree.
 const targetDir = join(repoRoot, "src-tauri", "target");
 const bundleDir = join(targetDir, "release", "bundle");
-const distRepo = "ztidal/ZtidalCode-dist";
-const brandingPath = join(repoRoot, "branding", "ztidalcode.json");
+const distRepo = "ztidal/GrokCode-dist";
+const brandingPath = join(repoRoot, "branding", "grokcode.json");
 
 function die(message) {
   console.error(`release: ${message}`);
@@ -71,7 +71,7 @@ function git(args, opts = {}) {
 
 const usage = `usage: npm run release -- [options]
 
-Cuts a ZtidalCode release from the hardening branch: bumps branding/ztidalcode.json (one commit,
+Cuts a GrokCode release from the hardening branch: bumps branding/grokcode.json (one commit,
 "build: X.Y.Z" — the only git write this script makes), builds in a detached release worktree so
 the bundles can only contain what is committed, generates and verifies the update feed
 (latest.json + SHA256SUMS.txt in the repo root), and on request installs and publishes it.
@@ -174,9 +174,9 @@ const branding = JSON.parse(brandingText);
 const currentVersion = branding.version;
 const productName = branding.productName;
 if (!/^\d+\.\d+\.\d+$/.test(currentVersion ?? "")) {
-  die(`branding/ztidalcode.json carries version "${currentVersion}"; expected X.Y.Z`);
+  die(`branding/grokcode.json carries version "${currentVersion}"; expected X.Y.Z`);
 }
-if (!productName) die("branding/ztidalcode.json names no productName");
+if (!productName) die("branding/grokcode.json names no productName");
 // Tauri names the exe after mainBinaryName and only falls back to productName; the overlay is
 // merged over the base config, so either file can supply either key.
 const baseConf = JSON.parse(readFileSync(join(repoRoot, "src-tauri", "tauri.conf.json"), "utf8"));
@@ -237,10 +237,10 @@ console.log(
     : `release ${currentVersion} -> ${version}`,
 );
 console.log(`  branch     hardening, clean, at ${git(["rev-parse", "--short", "HEAD"])}`);
-if (!noCommit) console.log(`  commit     branding/ztidalcode.json only, message "build: ${version}"`);
+if (!noCommit) console.log(`  commit     branding/grokcode.json only, message "build: ${version}"`);
 console.log(`  worktree   ${worktree} ${existsSync(worktree) ? "(reuse: re-detach to the release commit)" : "(will create)"}`);
 console.log(`  signing    ${keyLabel}`);
-console.log(`  build      npm run tauri -- build --config branding/ztidalcode.json`);
+console.log(`  build      npm run tauri -- build --config branding/grokcode.json`);
 console.log(`             with CARGO_TARGET_DIR=${targetDir}`);
 console.log(`  stale      ${stale.length ? `delete ${stale.map((f) => basename(f)).join(", ")}` : "nothing to delete"}`);
 console.log(`  feed       node ${feedArgs.join(" ")}`);
@@ -251,7 +251,7 @@ function printChecklist() {
   console.log(`
 release checklist (branding/README.md — both halves of the dist repo go stale silently):
   [ ] did usage change?    -> update README.md in ${distRepo}
-  [ ] did a feature change? -> update docs/index.html there (ztidal.github.io/ZtidalCode-dist)
+  [ ] did a feature change? -> update docs/index.html there (ztidal.github.io/GrokCode-dist)
       a plain version bump needs neither: version, download link and size come from the releases API
   [ ] git push origin hardening --follow-tags   (the "build: ${version}" commit and the v${version}
       tag are local until pushed — the macOS side builds from that tag)
@@ -270,13 +270,13 @@ if (dryRun) {
 
 if (!noCommit) {
   const bumped = brandingText.replace(`"version": "${currentVersion}"`, `"version": "${version}"`);
-  if (bumped === brandingText) die(`could not find "version": "${currentVersion}" in branding/ztidalcode.json`);
+  if (bumped === brandingText) die(`could not find "version": "${currentVersion}" in branding/grokcode.json`);
   writeFileSync(brandingPath, bumped);
   // Staged by name: anything a concurrent session drops into the tree between the preflight
   // check and this commit stays out of it.
-  git(["add", "branding/ztidalcode.json"]);
+  git(["add", "branding/grokcode.json"]);
   // Pathspec form: only this file lands, whatever a concurrent session staged.
-  git(["commit", "-m", `build: ${version}`, "--", "branding/ztidalcode.json"]);
+  git(["commit", "-m", `build: ${version}`, "--", "branding/grokcode.json"]);
   console.log(`\ncommitted "build: ${version}"`);
 }
 
@@ -356,7 +356,7 @@ const buildEnv = {
   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ?? "",
 };
 // npm is npm.cmd on Windows; spawn cannot start it without a shell.
-run("npm", ["run", "tauri", "--", "build", "--config", "branding/ztidalcode.json"], {
+run("npm", ["run", "tauri", "--", "build", "--config", "branding/grokcode.json"], {
   cwd: worktree,
   env: buildEnv,
   shell: true,

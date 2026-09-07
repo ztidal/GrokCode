@@ -181,7 +181,7 @@ fn modified_nanos(metadata: &fs::Metadata) -> Option<u64> {
 pub fn persist_session_usage_cache() {
     let _persist_guard = usage_persist_lock().lock();
     let path = usage_cache_path();
-    // Another ZtidalCode window rewrites this same file, so the write needs the
+    // Another GrokCode window rewrites this same file, so the write needs the
     // cross-process lock as well as the in-process one — and what we write is a
     // merge, not our own map, because we would otherwise drop their entries.
     let _cross_process_guard =

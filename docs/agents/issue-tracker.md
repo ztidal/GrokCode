@@ -1,7 +1,7 @@
 # Issue tracker: GitHub Issues, with `.scratch/` for what is not an issue
 
 Bug reports and feature requests for this repo are GitHub Issues on
-[`ztidal/ZtidalCode`](https://github.com/ztidal/ZtidalCode/issues). Specs (you may know a spec as a PRD),
+[`ztidal/GrokCode`](https://github.com/ztidal/GrokCode/issues). Specs (you may know a spec as a PRD),
 measurements, comparisons and hand-off notes live as markdown under `.scratch/<slug>/` in this repo,
 versioned beside the code they describe. The two are not interchangeable: an issue is something that gets
 closed, a note is something that stays true.
@@ -34,7 +34,7 @@ file is never the only record of a bug.
 Create a GitHub Issue and apply the triage label from `triage-labels.md`:
 
 ```bash
-gh issue create --repo ztidal/ZtidalCode --title "<title>" --body-file <file> --label <triage label>
+gh issue create --repo ztidal/GrokCode --title "<title>" --body-file <file> --label <triage label>
 ```
 
 If what the skill produced is a spec rather than a ticket, write it to `.scratch/<slug>/spec.md` and open
@@ -43,7 +43,7 @@ one issue per piece of work it implies — never a single combined issue.
 ## When a skill says "fetch the relevant ticket"
 
 ```bash
-gh issue view <number> --repo ztidal/ZtidalCode --comments
+gh issue view <number> --repo ztidal/GrokCode --comments
 ```
 
 The user will normally pass the number or the URL. A path under `.scratch/` is a note, not a ticket: read

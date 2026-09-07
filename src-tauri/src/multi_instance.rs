@@ -1,11 +1,11 @@
-//! Running several ZtidalCode windows at once, each as its own OS process.
+//! Running several GrokCode windows at once, each as its own OS process.
 //!
 //! A second window cannot be a `WebviewWindow`: `capabilities/default.json`
 //! scopes every permission to the window label `main`, so an in-process sibling
 //! comes up with no IPC at all. Nothing stops a second *process* — there is no
 //! single-instance plugin — so what this module provides is not the ability to
 //! run two windows but the mutual exclusion that makes it safe: the processes
-//! share `~/.ztidalcode`, and the documents there are rewritten whole.
+//! share `~/.grokcode`, and the documents there are rewritten whole.
 //!
 //! `fs_atomic` already makes each replace all-or-nothing, which rules out torn
 //! files but not lost updates: two processes that each serialize their own copy

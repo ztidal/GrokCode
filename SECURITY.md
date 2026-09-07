@@ -1,11 +1,11 @@
 # Security
 
-ZtidalCode ships self-updating desktop binaries, so the questions that matter are which build is
+GrokCode ships self-updating desktop binaries, so the questions that matter are which build is
 supported, how an update earns trust, what the app does with credentials, and where to report a problem.
 
 ## Supported versions
 
-Only the latest release on [ZtidalCode-dist](https://github.com/ztidal/ZtidalCode-dist/releases) is
+Only the latest release on [GrokCode-dist](https://github.com/ztidal/GrokCode-dist/releases) is
 supported. Installed clients check that feed at every launch and update themselves, so a fix ships as
 the next release rather than as a patch to an older version.
 
@@ -13,7 +13,7 @@ the next release rather than as a patch to an older version.
 
 Every update artifact carries a [minisign](https://jedisct1.github.io/minisign/) signature, and the
 updater verifies it against a public key compiled into the build through the identity overlay:
-`plugins.updater.pubkey` in [`branding/ztidalcode.json`](branding/ztidalcode.json). An artifact whose
+`plugins.updater.pubkey` in [`branding/grokcode.json`](branding/grokcode.json). An artifact whose
 signature does not verify against that key is not installed, whoever serves it. The matching private key
 is not in this repository; [`branding/README.md`](branding/README.md#signing) describes how it is kept
 and what losing or leaking it would mean. The feed itself (`latest.json`, `latest-mac.json`) is generated

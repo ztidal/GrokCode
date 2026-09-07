@@ -74,7 +74,7 @@ export function WindowsTitlebar({
   };
 
   return (
-    <header className="windows-titlebar" aria-label="ZtidalCode window controls">
+    <header className="windows-titlebar" aria-label="GrokCode window controls">
       <div className="windows-titlebar-drag" data-tauri-drag-region>
         <img
           className="windows-titlebar-logo"
@@ -84,11 +84,7 @@ export function WindowsTitlebar({
           height={16}
           draggable={false}
         />
-        <span className="windows-titlebar-name">ZtidalCode</span>
-        {/* What it is for, beside what it is called. The product name
-            deliberately does not carry xAI's mark; saying which agent it
-            drives is a description, and belongs here rather than in the
-            name. */}
+        <span className="windows-titlebar-name">GrokCode</span>
         <span className="windows-titlebar-tag">for Grok Build</span>
       </div>
 
